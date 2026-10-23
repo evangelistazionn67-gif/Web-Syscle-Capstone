@@ -16,6 +16,10 @@ using OtpNet;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(k => { k.Limits.MaxRequestBodySize = 6_000_000; k.Limits.MaxRequestHeadersTotalSize = 32_768; k.Limits.MaxRequestLineSize = 8_192; });
+
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5080";
+builder.WebHost.UseUrls($"http://*:{port}");
+
 var cs = builder.Configuration.GetConnectionString("Syscle") ?? throw new InvalidOperationException("Missing ConnectionStrings:Syscle in appsettings.json");
 builder.Services.AddSingleton(new Db(cs));
 builder.Services.AddSingleton<EmailService>();
