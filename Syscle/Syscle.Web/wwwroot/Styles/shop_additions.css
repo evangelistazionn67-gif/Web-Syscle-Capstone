@@ -145,3 +145,21 @@ a.sy-btn{display:inline-block;text-decoration:none;text-align:center}
 .sy-bplus{font-size:24px;font-weight:bold;color:#9ca3af}
 .sy-bnames{font-size:14px;line-height:1.35;min-height:2.7em}
 .sy-bprice s{color:#9ca3af}.sy-bprice b{font-size:22px;margin:0 6px}.sy-bprice small{display:block;color:#15803d;font-weight:600}
+
+/* ===== size selection ===== */
+.sy-sizebtns{display:flex;gap:8px;flex-wrap:wrap}
+.sy-sizebtn{border:1px solid #111;background:#fff;color:#111;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:600}
+.sy-sizebtn.on,.sy-sizebtn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.sy-psizes{font-size:12px;color:var(--muted)}
+.sy-sizetag{background:#eee;color:#111;border-radius:6px;padding:1px 7px;font-size:12px;margin-left:6px;font-weight:600}
+.pos-size{padding:6px;border:1px solid #111;border-radius:6px;margin:0 8px;background:#fff;color:#000}
+
+/* action buttons: stacked with a clear gap so they never touch */
+.sy-actions{display:flex;flex-direction:column;align-items:center;gap:8px}
+.sy-actions .sy-btn,.sy-actions .sy-x{min-width:84px;margin:0}
+.sy-x.small{padding:4px 12px;font-size:12px;border-radius:14px}
+
+/* GCash box in the cart */
+.sy-gcash{border:2px solid #000;border-radius:12px;padding:12px;margin:8px 0;background:#fff;color:#000;font-size:13px}
+.sy-gcash ol{margin:6px 0 8px 18px;padding:0}.sy-gcash img{display:block;width:150px;height:150px;object-fit:contain;margin:6px auto;border:2px solid #000;border-radius:8px}
+.sy-gcash input{width:100%;box-sizing:border-box;margin-bottom:4px}.sy-gcash small{color:#555}

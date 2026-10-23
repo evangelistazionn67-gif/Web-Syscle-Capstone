@@ -11,9 +11,11 @@ CREATE TABLE IF NOT EXISTS Users (
   Email          VARCHAR(120) NOT NULL UNIQUE,
   Phone          VARCHAR(30)  NULL,
   PasswordHash   VARCHAR(200) NOT NULL,
-  Role           ENUM('Admin','Customer') NOT NULL,
+  Role           ENUM('SuperAdmin','Admin','Customer') NOT NULL,
   Status         ENUM('Active','Suspended') NOT NULL DEFAULT 'Active',
   FpRequest      TINYINT(1)   NOT NULL DEFAULT 0,
+  TwoFactorEnabled TINYINT(1) NOT NULL DEFAULT 0,
+  TwoFactorSecret  VARCHAR(64) NULL,
   SessionVersion INT          NOT NULL DEFAULT 0,
   LastSeen       DATETIME     NULL,
   CreatedAt      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS Products (
   Price      DECIMAL(10,2)  NOT NULL CHECK (Price >= 0),
   Stock      INT            NOT NULL CHECK (Stock >= 0),
   ImagePath  VARCHAR(260)   NULL,
+  Sizes      VARCHAR(200)   NULL,   -- comma list such as 26,27.5,29 (customers must pick one)
   AddedAt    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (CategoryId) REFERENCES Categories(CategoryId) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -42,9 +45,11 @@ CREATE TABLE IF NOT EXISTS Products (
 CREATE TABLE IF NOT EXISTS CartItems (
   UserId    INT NOT NULL,
   ProductId INT NOT NULL,
+  Size      VARCHAR(30) NOT NULL DEFAULT '',
+  Color     VARCHAR(50) NOT NULL DEFAULT '',
   Qty       INT NOT NULL CHECK (Qty > 0),
   AddedAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (UserId, ProductId),
+  PRIMARY KEY (UserId, ProductId, Size, Color),
   FOREIGN KEY (UserId)    REFERENCES Users(UserId)       ON DELETE CASCADE,
   FOREIGN KEY (ProductId) REFERENCES Products(ProductId) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -85,6 +90,8 @@ CREATE TABLE IF NOT EXISTS OrderItems (
   OrderId     INT NOT NULL,
   ProductId   INT NULL,
   ProductName VARCHAR(100)  NOT NULL,   -- snapshot, so history survives product edits and deletes
+  Size        VARCHAR(30)   NOT NULL DEFAULT '',
+  Color       VARCHAR(50)   NOT NULL DEFAULT '',
   UnitPrice   DECIMAL(10,2) NOT NULL,
   Qty         INT NOT NULL CHECK (Qty > 0),
   FOREIGN KEY (OrderId)   REFERENCES Orders(OrderId)     ON DELETE CASCADE,
@@ -95,7 +102,7 @@ CREATE TABLE IF NOT EXISTS OrderItems (
 CREATE TABLE IF NOT EXISTS Bundles (
   BundleId        INT AUTO_INCREMENT PRIMARY KEY,
   Name            VARCHAR(160) NOT NULL,
-  DiscountPercent INT NOT NULL CHECK (DiscountPercent BETWEEN 5 AND 10),
+  DiscountPercent INT NOT NULL CHECK (DiscountPercent BETWEEN 1 AND 100),
   IsActive        TINYINT(1) NOT NULL DEFAULT 1,
   AutoMade        TINYINT(1) NOT NULL DEFAULT 0,
   CreatedAt       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -119,6 +126,32 @@ CREATE TABLE IF NOT EXISTS CartBundles (
   FOREIGN KEY (BundleId) REFERENCES Bundles(BundleId) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Colour options per product (picture per colour), product reviews, and site settings (payment QR).
+CREATE TABLE IF NOT EXISTS ProductVariants (
+  VariantId  INT AUTO_INCREMENT PRIMARY KEY,
+  ProductId  INT NOT NULL,
+  ColorName  VARCHAR(50)  NOT NULL,
+  ImagePath  VARCHAR(260) NULL,
+  FOREIGN KEY (ProductId) REFERENCES Products(ProductId) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Reviews (
+  ReviewId  INT AUTO_INCREMENT PRIMARY KEY,
+  ProductId INT NOT NULL,
+  UserId    INT NOT NULL,
+  Rating    INT NOT NULL CHECK (Rating BETWEEN 1 AND 5),
+  Comment   VARCHAR(1000) NULL,
+  CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (ProductId) REFERENCES Products(ProductId) ON DELETE CASCADE,
+  FOREIGN KEY (UserId)    REFERENCES Users(UserId)       ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Settings (
+  SettingKey   VARCHAR(60) PRIMARY KEY,
+  SettingValue VARCHAR(260) NULL
+) ENGINE=InnoDB;
+INSERT IGNORE INTO Settings (SettingKey, SettingValue) VALUES ('ShowPaymentQr','0'), ('PaymentQrImage', '');
+
 -- ---------- starter data (only inserted while the tables are empty) ----------
 INSERT INTO Categories (Name)
 SELECT t.n FROM (
@@ -127,22 +160,22 @@ SELECT t.n FROM (
 ) t WHERE NOT EXISTS (SELECT 1 FROM Categories);
 
 -- Prices and names follow ItemList.txt. Stock starts at 20 (change it in Inventory Management).
-INSERT INTO Products (CategoryId, ItemType, Name, Price, Stock, ImagePath)
-SELECT c.CategoryId, v.ItemType, v.Name, v.Price, v.Stock, v.ImagePath
+INSERT INTO Products (CategoryId, ItemType, Name, Price, Stock, ImagePath, Sizes)
+SELECT c.CategoryId, v.ItemType, v.Name, v.Price, v.Stock, v.ImagePath, v.Sizes
 FROM (
-  SELECT 'Mountain Bikes' AS CatName, 'Crankarm (MTB)' AS ItemType, 'Shimano Tourney Crank 3 Speed' AS Name, 250 AS Price, 20 AS Stock, '/Products/shimano-tourney-crank.jpg' AS ImagePath
-  UNION ALL SELECT 'Mountain Bikes', 'Rims', 'Sagmit Evo 3 Rims 26/27.5/29', 1200, 20, '/Products/sagmit-evo3-rims.jpg'
-  UNION ALL SELECT 'Mountain Bikes', 'Tire', 'Maxxis Pace 26/27.5/29', 1100, 20, '/Products/maxxis-pace.jpg'
-  UNION ALL SELECT 'Road Bikes', 'Rims', 'Ragusa Rims 700c', 1000, 20, '/Products/ragusa-rims-700c.jpg'
-  UNION ALL SELECT 'Road Bikes', 'Tire', 'Chaoyang Sharkskin Tires 700c x (23/25/28)', 650, 20, '/Products/chaoyang-sharkskin.jpg'
-  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Evo 3 Handle Bar', 700, 20, '/Products/sagmit-handlebar.jpg'
-  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Evo 3 Seatpost 27.2/31.6', 650, 20, '/Products/sagmit-seatpost.jpg'
-  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Safari Saddle', 700, 20, '/Products/sagmit-saddle.jpg'
-  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Systemone Stem', 650, 20, '/Products/sagmit-stem.jpg'
-  UNION ALL SELECT 'Others', 'Derailleur', 'Shimano Tourney RD', 250, 20, '/Products/shimano-tourney-rd.jpg'
-  UNION ALL SELECT 'Others', 'Derailleur', 'Shimano Tourney FD', 200, 20, '/Products/shimano-tourney-fd.jpg'
-  UNION ALL SELECT 'Others', 'Innertube', 'VeloStrim Innertubes 26/27.5/29/700c (23-45c)', 180, 20, '/Products/velostrim-innertubes.jpg'
-  UNION ALL SELECT 'Others', 'Spokes', 'Sagmit Spokes 26/27.5/29/700c', 450, 20, '/Products/sagmit-spokes.jpg'
+  SELECT 'Mountain Bikes' AS CatName, 'Crankarm (MTB)' AS ItemType, 'Shimano Tourney Crank 3 Speed' AS Name, 250 AS Price, 20 AS Stock, '/Products/shimano-tourney-crank.jpg' AS ImagePath, CAST(NULL AS CHAR(200)) AS Sizes
+  UNION ALL SELECT 'Mountain Bikes', 'Rims', 'Sagmit Evo 3 Rims 26/27.5/29', 1200, 20, '/Products/sagmit-evo3-rims.jpg', '26,27.5,29'
+  UNION ALL SELECT 'Mountain Bikes', 'Tire', 'Maxxis Pace 26/27.5/29', 1100, 20, '/Products/maxxis-pace.jpg', '26,27.5,29'
+  UNION ALL SELECT 'Road Bikes', 'Rims', 'Ragusa Rims 700c', 1000, 20, '/Products/ragusa-rims-700c.jpg', NULL
+  UNION ALL SELECT 'Road Bikes', 'Tire', 'Chaoyang Sharkskin Tires 700c x (23/25/28)', 650, 20, '/Products/chaoyang-sharkskin.jpg', '700x23,700x25,700x28'
+  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Evo 3 Handle Bar', 700, 20, '/Products/sagmit-handlebar.jpg', NULL
+  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Evo 3 Seatpost 27.2/31.6', 650, 20, '/Products/sagmit-seatpost.jpg', '27.2,31.6'
+  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Safari Saddle', 700, 20, '/Products/sagmit-saddle.jpg', NULL
+  UNION ALL SELECT 'Accessories', 'Cockpit', 'Sagmit Systemone Stem', 650, 20, '/Products/sagmit-stem.jpg', NULL
+  UNION ALL SELECT 'Others', 'Derailleur', 'Shimano Tourney RD', 250, 20, '/Products/shimano-tourney-rd.jpg', NULL
+  UNION ALL SELECT 'Others', 'Derailleur', 'Shimano Tourney FD', 200, 20, '/Products/shimano-tourney-fd.jpg', NULL
+  UNION ALL SELECT 'Others', 'Innertube', 'VeloStrim Innertubes 26/27.5/29/700c (23-45c)', 180, 20, '/Products/velostrim-innertubes.jpg', '26,27.5,29,700c'
+  UNION ALL SELECT 'Others', 'Spokes', 'Sagmit Spokes 26/27.5/29/700c', 450, 20, '/Products/sagmit-spokes.jpg', '26,27.5,29,700c'
 ) v JOIN Categories c ON c.Name = v.CatName
 WHERE NOT EXISTS (SELECT 1 FROM Products);
 
@@ -155,3 +188,21 @@ SELECT 'SYSCLE10', 10 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM PromoCodes);
 
 -- Check: should show 6 categories, 13 products, 2 payment methods
 SELECT (SELECT COUNT(*) FROM Categories) AS Categories, (SELECT COUNT(*) FROM Products) AS Products, (SELECT COUNT(*) FROM PaymentMethods) AS PaymentMethods;
+
+-- ---- v3: GCash reference numbers, e-mail preference, customer messages (the app also adds these by itself on start) ----
+SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Orders' AND COLUMN_NAME = 'PaymentRef');
+SET @s := IF(@c = 0, 'ALTER TABLE Orders ADD COLUMN PaymentRef VARCHAR(40) NULL', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Users' AND COLUMN_NAME = 'EmailNotify');
+SET @s := IF(@c = 0, 'ALTER TABLE Users ADD COLUMN EmailNotify TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+CREATE TABLE IF NOT EXISTS Messages (
+  MessageId    INT AUTO_INCREMENT PRIMARY KEY,
+  ThreadUserId INT NOT NULL,
+  Sender       ENUM('Customer','Staff') NOT NULL,
+  Body         VARCHAR(500) NOT NULL,
+  IsRead       TINYINT(1) NOT NULL DEFAULT 0,
+  CreatedAt    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX IX_Messages_Thread (ThreadUserId, MessageId),
+  FOREIGN KEY (ThreadUserId) REFERENCES Users(UserId) ON DELETE CASCADE
+) ENGINE=InnoDB;

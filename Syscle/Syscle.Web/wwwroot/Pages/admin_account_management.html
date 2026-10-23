@@ -1,30 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Account Management</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/admin_account_management.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Account Management</title>
+    <link rel="stylesheet" href="../Styles/global.css">
+    <link rel="stylesheet" href="../Styles/admin_account_management.css">
+    <link rel="stylesheet" href="../Styles/shop_additions.css">
 </head>
 <body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search accounts...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="adminhomepage.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Dashboard" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<main class="sy-page">
-    <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Account Management</h1>
-    <div class="sy-pos"><div class="sy-scroll"><table class="sy-table"><thead><tr><th></th><th>ID</th><th>USERNAME</th><th>EMAIL</th><th>CONTACT NUMBER</th><th>ACCOUNT STATUS</th><th>FP REQUEST</th></tr></thead><tbody id="account-table-body"></tbody></table></div>
-      <div class="sy-card"><h3>Actions (tick accounts first)</h3>
-        <button class="sy-btn" id="btn-change-password" type="button">Change Password</button> <button class="sy-btn" id="btn-logout" type="button">Log Out</button>
-        <button class="sy-btn" id="btn-suspend" type="button">Suspend / Restore</button> <button class="sy-x" id="btn-delete" type="button">Delete Permanently</button>
-        <h3 style="margin-top:22px">Add admin account</h3>
-        <input class="sy-input" id="new-admin-username" placeholder="Username" autocomplete="off"><input class="sy-input" id="new-admin-email" type="email" placeholder="Email" autocomplete="off"><input class="sy-input" id="new-admin-password" type="password" placeholder="Password (8+ characters)" autocomplete="new-password">
-        <button class="sy-btn" id="btn-add-admin" type="button">Add Admin</button></div></div>
-  </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_accounts.js"></script>
+    <header class="top-nav">
+        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
+        <div class="search-container">
+            <input type="text" id="main-search-input" class="search-bar" placeholder="Search accounts...">
+            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
+            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
+        </div>
+        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    </header>
+    <main class="sy-page">
+        <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Account Management</h1>
+        <div class="sy-pos">
+            <div class="sy-scroll"><table class="sy-table"><thead><tr><th></th><th>ID</th><th>USERNAME</th><th>EMAIL</th><th>CONTACT NUMBER</th><th>ACCOUNT STATUS</th><th>FP REQUEST</th></tr></thead><tbody id="account-table-body"></tbody></table></div>
+
+            <div class="sy-card" style="padding: 20px;">
+                <h3>Actions (tick accounts first)</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <button class="sy-btn" id="btn-change-password" type="button">Change Password</button>
+                    <button class="sy-btn" id="btn-logout" type="button">Log Out</button>
+                    <button class="sy-btn" id="btn-suspend" type="button" style="background:#b3261e; color:white;">Suspend</button>
+                    <button class="sy-btn" id="btn-restore" type="button" style="background:#1b7a2f; color:white;">Restore</button>
+                    <button class="sy-btn" id="btn-delete" type="button" style="background:#333; color:white;">Delete</button>
+                </div>
+
+                <h3 style="margin-top:22px">SuperAdmin Controls</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <button class="sy-btn ghost" id="btn-promote" type="button">Promote to Admin</button>
+                    <button class="sy-btn ghost" id="btn-demote" type="button">Demote to Customer</button>
+                </div>
+
+                <h3 style="margin-top:22px">Add admin account</h3>
+                <input class="sy-input" id="new-admin-username" placeholder="Username" autocomplete="off">
+                <input class="sy-input" id="new-admin-email" type="email" placeholder="Email" autocomplete="off">
+                <input class="sy-input" id="new-admin-password" type="password" placeholder="Password (8+ characters)" autocomplete="new-password">
+                <button class="sy-btn" id="btn-add-admin" type="button">Add Admin</button>
+            </div>
+        </div>
+    </main>
+    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
+    <script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_accounts.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

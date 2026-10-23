@@ -1,27 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Payment Setup</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/admin_payment_setup.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Payment Setup</title>
+    <link rel="stylesheet" href="../Styles/global.css">
+    <link rel="stylesheet" href="../Styles/admin_payment_setup.css">
+    <link rel="stylesheet" href="../Styles/shop_additions.css">
 </head>
 <body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="adminhomepage.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Dashboard" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<main class="sy-page">
-    <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Payment Setup</h1>
-    <div class="sy-card"><div class="sy-switch"><span>Cash (pay at pick-up)</span><button class="toggle-btn" data-code="cash" type="button">ON</button></div></div>
-    <div class="sy-card"><div class="sy-switch"><span>GCash</span><button class="toggle-btn" data-code="gcash" type="button">ON</button></div>
-      <label>GCash number</label><input class="sy-input" id="gcash-number" maxlength="60"><label>Account name</label><input class="sy-input" id="gcash-name" maxlength="80"></div>
-    <button class="sy-btn" id="btn-apply" type="button">APPLY CHANGES</button>
-  </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_payment.js"></script>
+    <header class="top-nav">
+        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
+        <div class="search-container">
+            <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
+            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
+            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
+        </div>
+        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    </header>
+    <main class="sy-page">
+        <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Payment Setup</h1>
+        <div class="sy-card"><div class="sy-switch"><span>Cash (pay at pick-up)</span><button class="toggle-btn" data-code="cash" type="button">ON</button></div></div>
+        <div class="sy-card">
+            <div class="sy-switch"><span>GCash</span><button class="toggle-btn" data-code="gcash" type="button">ON</button></div>
+            <p class="sy-sub">Customers see this number at checkout, pay to it in their GCash app, and type the reference number from their receipt. You will see that reference on the order in Transactions History &ndash; check it in your GCash app before you press Complete.</p><label>GCash number</label><input class="sy-input" id="gcash-number" maxlength="60"><label>Account name</label><input class="sy-input" id="gcash-name" maxlength="80">
+        </div>
+
+        <div class="sy-card">
+            <h3>Payment QR Code</h3>
+            <div class="sy-switch" style="margin-bottom:15px;">
+                <span>Show QR Code to Customers</span>
+                <button class="toggle-btn" id="qr-toggle" type="button">OFF</button>
+            </div>
+            <label>Upload QR Image (.jpg/.png)</label>
+            <input type="file" id="qr-file" accept="image/*" class="sy-input">
+            <img id="qr-preview" class="sy-preview" style="display:none; max-height:150px; margin-top:10px;">
+        </div>
+
+        <button class="sy-btn" id="btn-apply" type="button">APPLY CHANGES</button>
+    </main>
+    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
+    <script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_payment.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Promo Codes</title>
+    <link rel="stylesheet" href="../Styles/global.css">
+    <link rel="stylesheet" href="../Styles/shop_additions.css">
+</head>
+<body>
+    <header class="top-nav">
+        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
+        <div class="search-container">
+            <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
+            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
+            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
+        </div>
+        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    </header>
+    <main class="sy-page">
+        <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Promo Codes</h1>
+        <p class="sy-sub">Customers type a code in their cart to get a percentage off. Switch a code Off to stop it without deleting it.</p>
+
+        <div class="sy-card">
+            <h3>Add a promo code</h3>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input id="pc-code" class="sy-input" placeholder="Code, e.g. SUMMER15" maxlength="30" style="flex:1; min-width:200px; text-transform:uppercase;">
+                <input id="pc-pct" class="sy-input" type="number" min="1" max="90" value="10" style="width:110px;" aria-label="Percent off">
+                <span>% off</span>
+                <button class="sy-btn" id="pc-add" type="button">Add Code</button>
+            </div>
+        </div>
+
+        <div class="sy-scroll"><table class="sy-table"><thead><tr><th>CODE</th><th>DISCOUNT</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody id="promo-table-body"></tbody></table></div>
+    </main>
+    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
+    <script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_promos.js"></script>
+    <script src="../JavaScripts/support.js"></script>
+</body>
+</html>

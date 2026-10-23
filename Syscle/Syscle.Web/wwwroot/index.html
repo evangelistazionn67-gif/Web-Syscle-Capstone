@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="background-wrapper">
-        
+
         <div class="form-container" id="login-container" style="display: block;">
             <div class="header-row">
                 <div class="logo-area">
@@ -23,12 +23,12 @@
             <form class="auth-form" action="#" method="POST" onsubmit="return false;">
                 <div class="input-group">
                     <label for="login-email">Email | Username</label>
-                    <input type="text" id="login-email" name="login-email">
+                    <input type="text" id="login-email" name="login-email" maxlength="50" autocomplete="username">
                 </div>
-                
+
                 <div class="input-group">
                     <label for="login-password">Password</label>
-                    <input type="password" id="login-password" name="login-password">
+                    <input type="password" id="login-password" name="login-password" maxlength="64" autocomplete="current-password">
                 </div>
 
                 <div class="form-options">
@@ -60,22 +60,22 @@
             <form class="auth-form" action="#" method="POST" onsubmit="return false;">
                 <div class="input-group">
                     <label for="reg-username">Username</label>
-                    <input type="text" id="reg-username" name="reg-username">
+                    <input type="text" id="reg-username" name="reg-username" maxlength="14" autocomplete="username">
                 </div>
-                
+
                 <div class="input-group">
                     <label for="reg-email">Email Address</label>
-                    <input type="email" id="reg-email" name="reg-email">
+                    <input type="email" id="reg-email" name="reg-email" maxlength="50">
                 </div>
-                
+
                 <div class="input-group">
                     <label for="reg-password">Password</label>
-                    <input type="password" id="reg-password" name="reg-password">
+                    <input type="password" id="reg-password" name="reg-password" maxlength="14" autocomplete="new-password">
                 </div>
-                
+
                 <div class="input-group">
                     <label for="reg-confirm">Confirm Password</label>
-                    <input type="password" id="reg-confirm" name="reg-confirm">
+                    <input type="password" id="reg-confirm" name="reg-confirm" maxlength="14" autocomplete="new-password">
                 </div>
 
                 <button type="submit" class="pill-btn" id="btn-register">SIGN UP</button>
@@ -104,14 +104,82 @@
 
                 <div class="input-group">
                     <label for="forgot-email">Email Address</label>
-                    <input type="email" id="forgot-email" name="forgot-email">
+                    <input type="email" id="forgot-email" name="forgot-email" maxlength="50">
                 </div>
-                
+
                 <button type="submit" class="pill-btn" id="btn-reset">SEND LINK</button>
 
                 <div class="switch-form-text">
+                    No access to your email? <a href="#" id="link-to-sms" class="link-text">Reset with my mobile number</a>
+                </div>
+                <div class="switch-form-text">
                     Remembered your password? <a href="#" id="link-to-login-from-forgot" class="link-text">Back to Login</a>
                 </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="sms-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Reset by SMS</h1>
+                </div>
+            </div>
+            <form class="auth-form" onsubmit="return false;">
+                <div id="sms-step1">
+                    <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">
+                        Enter the mobile number saved in your account. We will text you a 6-digit code.
+                    </p>
+                    <div class="input-group">
+                        <label for="sms-phone">Mobile Number</label>
+                        <input type="tel" id="sms-phone" maxlength="14" placeholder="09171234567" inputmode="tel">
+                    </div>
+                    <button type="submit" class="pill-btn" id="btn-sms-send">SEND CODE</button>
+                </div>
+                <div id="sms-step2" style="display: none;">
+                    <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">
+                        Type the code we sent, then choose a new password (8 to 14 characters).
+                    </p>
+                    <div class="input-group">
+                        <label for="sms-code">6-digit Code</label>
+                        <input type="text" id="sms-code" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
+                    </div>
+                    <div class="input-group">
+                        <label for="sms-new">New Password</label>
+                        <input type="password" id="sms-new" maxlength="14" autocomplete="new-password">
+                    </div>
+                    <div class="input-group">
+                        <label for="sms-confirm">Confirm New Password</label>
+                        <input type="password" id="sms-confirm" maxlength="14" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="pill-btn" id="btn-sms-reset">CHANGE PASSWORD</button>
+                </div>
+                <div class="switch-form-text">
+                    <a href="#" id="link-to-login-from-sms" class="link-text">Back to Login</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="twofa-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Two-Factor Auth</h1>
+                </div>
+            </div>
+            <form class="auth-form" onsubmit="return false;">
+                <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold;">Enter the 6-digit code from your Authenticator app.</p>
+                <div class="input-group">
+                    <label for="login-2fa">2FA Code</label>
+                    <input type="text" id="login-2fa" autocomplete="off" maxlength="6" inputmode="numeric">
+                </div>
+                <button type="submit" class="pill-btn" id="btn-login-2fa">VERIFY</button>
             </form>
         </div>
 

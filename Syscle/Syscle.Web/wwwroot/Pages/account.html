@@ -12,24 +12,31 @@
       <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
       <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
     </div>
-    <div class="nav-actions"><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
   </header>
-<main class="account-wrapper sy-page">
-    <a id="back-link" class="back-btn" href="homepage.html">&larr; Back</a>
-    <h1>My Account</h1>
-    <p class="sy-sub" id="acct-id"></p>
-    <div class="sy-card">
-      <div class="input-group"><input class="info-input" id="disp-username" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
-      <div class="input-group"><input class="info-input" id="disp-email" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
-      <div class="input-group"><input class="info-input" id="disp-contact" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
-      <div class="input-group"><input class="info-input" id="disp-password" value="Password: ********" readonly><span class="edit-icon" title="Change password">&#9998;</span></div>
-      <button class="sy-btn" onclick="logoutUser()" type="button">LOG-OUT</button>
-    </div>
-    <section id="history-section"><h2>My Orders</h2>
-      <div class="sy-scroll"><table class="sy-table"><thead><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Pick-up</th><th>Status</th><th>Action</th></tr></thead><tbody id="history-body"></tbody></table></div>
-    </section>
+  <main class="account-wrapper sy-page">
+      <a id="back-link" class="back-btn" href="homepage.html">&larr; Back</a>
+      <h1>My Account</h1>
+      <p class="sy-sub" id="acct-id"></p>
+      <div class="sy-card">
+          <div class="input-group"><input class="info-input" id="disp-username" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
+          <div class="input-group"><input class="info-input" id="disp-email" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
+          <div class="input-group"><input class="info-input" id="disp-contact" readonly><span class="edit-icon" title="Edit">&#9998;</span></div>
+          <div class="input-group"><input class="info-input" id="disp-password" value="Password: ********" readonly><span class="edit-icon" title="Change password">&#9998;</span></div>
+          <button class="sy-btn" onclick="logoutUser()" type="button">LOG-OUT</button>
+      </div>
+      <div class="sy-card" style="margin-top: 20px;">
+          <h3>Security (2FA)</h3>
+          <p class="sy-sub" id="tfa-status">Protect your account with Google Authenticator or Authy.</p>
+          <button class="sy-btn" id="btn-setup-2fa" type="button">Setup 2FA</button>
+      </div>
+      <section id="history-section">
+          <h2>My Orders</h2>
+          <div class="sy-scroll"><table class="sy-table"><thead><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Pick-up</th><th>Status</th><th>Action</th></tr></thead><tbody id="history-body"></tbody></table></div>
+      </section>
   </main>
   <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
   <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/account.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web-Syscle - Choose a new password</title>
+    <link rel="stylesheet" href="Styles/LRFP_styles.css">
+</head>
+<body>
+    <div class="background-wrapper">
+        <div class="form-container">
+            <div class="header-row">
+                <div class="logo-area"><h2>Web-Syscle</h2><p>Shop &amp; Customize</p></div>
+                <div class="welcome-text"><h1>New Password</h1></div>
+            </div>
+            <form class="auth-form" onsubmit="return false;">
+                <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">Choose a new password (at least 8 characters).</p>
+                <div class="input-group"><label for="new-password">New password</label><input type="password" id="new-password" maxlength="14" autocomplete="new-password"></div>
+                <div class="input-group"><label for="new-confirm">Confirm new password</label><input type="password" id="new-confirm" maxlength="14" autocomplete="new-password"></div>
+                <button type="submit" class="pill-btn" id="btn-save-password">SAVE PASSWORD</button>
+                <div class="switch-form-text"><a href="index.html" class="link-text">Back to Login</a></div>
+            </form>
+        </div>
+    </div>
+    <script src="reset.js"></script>
+</body>
+</html>

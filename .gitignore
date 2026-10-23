@@ -1,0 +1,14 @@
+# build output / editor files
+bin/
+obj/
+.vs/
+*.user
+*.suo
+# secrets and local-only files - never commit these
+appsettings.Development.json
+**/.keys/
+# pictures uploaded while testing
+Syscle/Syscle.Web/wwwroot/Products/prod_*
+Syscle/Syscle.Web/wwwroot/Products/var_*
+Syscle/Syscle.Web/wwwroot/Icons_and_Buttons/cat_*
+Syscle/Syscle.Web/wwwroot/Images/

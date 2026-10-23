@@ -26,17 +26,29 @@
     shelf.innerHTML = list.map(productCard).join('') || '<div class="sy-empty">No parts found. Try another search or filter.</div>';
   }
   function bundleCard(b) {
-    return `<article class="sy-bcard"><div class="sy-bsave">Save ${b.discountPercent}%</div>
-      <div class="sy-bimgs">${b.items.map(i => `<div class="sy-bimg">${i.image ? `<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy">` : ''}</div>`).join('<span class="sy-bplus">+</span>')}</div>
-      <div class="sy-bnames">${b.items.map(i => esc(i.name)).join('<br>')}</div>
+    const bogo = b.items.length === 1 && b.items[0].qty === 2 && b.discountPercent === 50;
+    const pics = b.items.flatMap(i => Array.from({ length: i.qty }, () => i));
+    return `<article class="sy-bcard"><div class="sy-bsave">${bogo ? 'Buy 1 Get 1' : 'Save ' + b.discountPercent + '%'}</div>
+      <div class="sy-bimgs">${pics.map(i => `<div class="sy-bimg">${i.image ? `<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy">` : ''}</div>`).join('<span class="sy-bplus">+</span>')}</div>
+      <div class="sy-bnames">${b.items.map(i => esc(i.name) + (i.qty > 1 ? ' &times; ' + i.qty : '')).join('<br>')}</div>
       <div class="sy-bprice"><s>${peso(b.listPrice)}</s> <b>${peso(b.price)}</b><small>You save ${peso(b.saving)}</small></div>
       <button class="sy-btn accent" data-addbundle="${b.id}">Add bundle to cart</button></article>`;
   }
   const bundleBox = document.getElementById('bundle-list');
-  bundleBox.addEventListener('click', async e => {
+  let bundleData = [];
+  async function addBundle(id, sizes) {
+    try { await api('/api/cart/bundle', 'POST', { bundleId: id, qty: 1, sizes }); toast('Bundle added. The discount shows in your cart.', false, 'View cart', 'cart.html'); refreshCartBadge(); return true; }
+    catch (err) { toast(err.message, true); return false; }
+  }
+  bundleBox.addEventListener('click', e => {
     const id = e.target.dataset.addbundle; if (!id) return;
-    try { await api('/api/cart/bundle', 'POST', { bundleId: +id, qty: 1 }); toast('Bundle added. The discount shows in your cart.', false, 'View cart', 'cart.html'); refreshCartBadge(); }
-    catch (err) { toast(err.message, true); }
+    const b = bundleData.find(x => x.id === +id), sized = b ? b.items.filter(i => i.sizes) : [];
+    if (!sized.length) { addBundle(+id, {}); return; }
+    const m = showModal(`<div class="sy-done"><h2>Choose your sizes</h2>${sized.map(i => `<p><b>${esc(i.name)}</b><br><select data-pid="${i.id}" class="sy-input"><option value="">Choose a size</option>${i.sizes.split(',').map(z => `<option>${esc(z.trim())}</option>`).join('')}</select></p>`).join('')}<div class="sy-pm-actions"><button class="sy-btn accent" id="bz-go" type="button">Add bundle to cart</button></div></div>`);
+    m.el.querySelector('#bz-go').addEventListener('click', async () => {
+      const sizes = {}; m.el.querySelectorAll('select[data-pid]').forEach(z => { sizes[z.dataset.pid] = z.value; });
+      if (await addBundle(+id, sizes)) m.close();
+    });
   });
   chips.addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) { filter = b.dataset.cat; renderShelf(); } });
   if (sortEl) sortEl.addEventListener('change', () => { mode = sortEl.value; renderShelf(); });
@@ -45,7 +57,7 @@
   catch (e) { location.href = 'error.html'; return; }
   try {
     const bundles = await api('/api/bundles');
-    if (bundles.length) { bundleBox.innerHTML = bundles.map(bundleCard).join(''); document.getElementById('bundles').hidden = false; }
+    if (bundles.length) { bundleData = bundles; bundleBox.innerHTML = bundles.map(bundleCard).join(''); document.getElementById('bundles').hidden = false; }
   } catch (e) { /* bundles are optional */ }
   initHeader(t => { q = t; renderCats(); renderShelf(); });
   bindProductCards(shelf, () => items);

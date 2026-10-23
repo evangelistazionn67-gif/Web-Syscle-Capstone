@@ -12,7 +12,7 @@
       <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
       <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
     </div>
-    <div class="nav-actions"><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
   </header>
 <main class="cart-page-wrapper">
     <div class="cart-header"><button onclick="window.location.href='homepage.html'" class="back-btn">&larr; Back to Storefront</button>
@@ -28,6 +28,13 @@
             <span class="right-align">Pick-up: <input type="date" class="promo-input" id="pickup-date"></span>
           </div>
           <div class="promo-input-group" style="margin:8px 0"><label>Payment:</label><select class="promo-input" id="payment-method"></select></div>
+          <div class="sy-gcash" id="gcash-box" hidden>
+            <b>Pay with GCash</b>
+            <ol><li>Send the total to <b id="gc-number"></b> <span id="gc-name"></span></li><li>Type the reference number from your GCash receipt below</li></ol>
+            <img id="gc-qr" alt="GCash QR code" hidden>
+            <input type="text" id="gc-ref" class="promo-input" maxlength="20" placeholder="GCash reference number" autocomplete="off">
+            <small>The store checks your payment before it completes your order.</small>
+          </div>
           <p class="cost-breakdown-title">Cost Breakdown</p>
           <div class="cost-breakdown-window" id="cost-breakdown-container"><div class="breakdown-headers"><span>--- Product Cost ---</span><span>--- Product Quantity ---</span></div></div>
           <div class="total-cost-row"><strong id="total-cost">Total Cost: 0</strong></div>
@@ -39,5 +46,6 @@
   </main>
   <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
   <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/cart.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

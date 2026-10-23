@@ -10,7 +10,7 @@ for i in $(seq 1 40); do
   sleep 2
 done
 mysql -h db -uroot -psyscle < Database/Syscle_MySQL.sql
-dotnet restore Syscle.Web/Syscle.Web.csproj
+dotnet restore Syscle/Syscle.Web/Syscle.Web.csproj
 echo ""
 echo "READY. To start the website run:"
-echo "  cd Syscle.Web && dotnet run --no-launch-profile --urls http://0.0.0.0:5080"
+echo "  cd Syscle/Syscle.Web && dotnet run --no-launch-profile --urls http://0.0.0.0:5080"

@@ -3,13 +3,25 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "forwardPorts": [5080],
+  "forwardPorts": [
+    5080
+  ],
   "portsAttributes": {
-    "5080": { "label": "Web-Syscle", "onAutoForward": "openBrowser" }
+    "5080": {
+      "label": "Web-Syscle",
+      "onAutoForward": "openBrowser",
+      "visibility": "private"
+    }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "nohup dotnet run --project Syscle/Syscle.Web/Syscle.Web.csproj > /tmp/dotnet.log 2>&1 &",
+  "postStartCommand": "nohup bash -c 'cd Syscle/Syscle.Web && dotnet run --no-launch-profile --urls http://0.0.0.0:5080' > /tmp/dotnet.log 2>&1 &",
   "customizations": {
-    "vscode": { "extensions": ["ms-dotnettools.csharp"] }
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "cweijan.vscode-mysql-client2"
+      ]
+    }
   }
 }

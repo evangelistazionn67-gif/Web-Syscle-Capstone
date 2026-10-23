@@ -1,22 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Admin Dashboard</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/homepage_styles.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Admin Dashboard</title>
+    <link rel="stylesheet" href="../Styles/global.css">
+    <link rel="stylesheet" href="../Styles/homepage_styles.css">
+    <link rel="stylesheet" href="../Styles/shop_additions.css">
 </head>
 <body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="adminhomepage.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Dashboard" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<section class="sy-page" id="admin-stats"><p class="sy-empty">Loading the dashboard...</p></section>
-  <main class="customer-dashboard"><div class="category-grid"><div class="category-card default-category" onclick="location.href='admin_transaction.html'" tabindex="0"><h3>Walk-in Transaction</h3></div><div class="category-card default-category" onclick="location.href='admin_transaction_history.html'" tabindex="0"><h3>Transactions History</h3></div><div class="category-card default-category" onclick="location.href='admin_inventory.html'" tabindex="0"><h3>Inventory Management</h3></div><div class="category-card default-category" onclick="location.href='admin_payment_setup.html'" tabindex="0"><h3>Payment Setup</h3></div><div class="category-card default-category" onclick="location.href='admin_storefront.html'" tabindex="0"><h3>Store-front Config</h3></div><div class="category-card default-category" onclick="location.href='admin_account_management.html'" tabindex="0"><h3>Account Management</h3></div><div class="category-card default-category" onclick="location.href='admin_bundles.html'" tabindex="0"><h3>Bundle Offers</h3></div></div></main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_dashboard.js"></script>
+    <header class="top-nav">
+        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
+        <div class="search-container">
+            <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
+            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
+            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
+        </div>
+        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    </header>
+    <section class="sy-page" id="admin-stats"><p class="sy-empty">Loading the dashboard...</p></section>
+    <main class="customer-dashboard">
+        <div class="category-grid">
+            <div class="category-card default-category" onclick="location.href='admin_transaction.html'" tabindex="0"><h3>Walk-in Transaction</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_transaction_history.html'" tabindex="0"><h3>Transactions History</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_inventory.html'" tabindex="0"><h3>Inventory Management</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_payment_setup.html'" tabindex="0"><h3>Payment Setup</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_storefront.html'" tabindex="0"><h3>Store-front Config</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_account_management.html'" tabindex="0"><h3>Account Management</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_bundles.html'" tabindex="0"><h3>Bundle Offers</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_reviews.html'" tabindex="0"><h3>Review Moderation</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_promos.html'" tabindex="0"><h3>Promo Codes</h3></div>
+            <div class="category-card default-category" onclick="location.href='admin_messages.html'" tabindex="0"><h3>Customer Messages<span class="sy-tile-badge" id="tile-msg-badge" style="display:none">0</span></h3></div>
+        </div>
+    </main>
+    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
+    <script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_dashboard.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -1,29 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Bundle Offers</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Bundle Offers</title>
+    <link rel="stylesheet" href="../Styles/global.css">
+    <link rel="stylesheet" href="../Styles/shop_additions.css">
 </head>
 <body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="adminhomepage.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Dashboard" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<main class="sy-page">
-    <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Bundle Offers</h1>
-    <p class="sy-sub" id="bundle-note"></p>
-    <div class="sy-card"><h3>Create or find bundles</h3>
-      <div class="sy-filters"><select id="nb-a" class="sy-input" aria-label="First part"></select><select id="nb-b" class="sy-input" aria-label="Second part"></select>
-        <select id="nb-pct" class="sy-input" aria-label="Discount"><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
-        <button class="sy-btn" id="nb-create" type="button">Create bundle</button><button class="sy-btn ghost" id="nb-generate" type="button">Find slow-moving items now</button></div></div>
-    <div class="sy-scroll"><table class="sy-table"><thead><tr><th>BUNDLE</th><th>PARTS</th><th>LIST PRICE</th><th>OFFER PRICE</th><th>DISCOUNT</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody id="bundle-table-body"></tbody></table></div>
-  </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_bundles.js"></script>
+    <header class="top-nav">
+        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
+        <div class="search-container">
+            <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
+            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
+            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
+        </div>
+        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
+    </header>
+    <main class="sy-page">
+        <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Bundle Offers</h1>
+        <p class="sy-sub" id="bundle-note"></p>
+
+        <div class="sy-card">
+            <h3>Create a Bundle</h3>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <select id="nb-product" class="sy-input" style="flex:1;"></select>
+                <button class="sy-btn" id="btn-add-to-box" type="button">+ Add Item</button>
+                <button class="sy-btn" id="btn-bogo" type="button" style="background:#ff5a1f;">Make BOGO (2 of this item)</button>
+            </div>
+
+            <div id="bundle-box" style="border:2px dashed #ccc; padding:10px; min-height:60px; margin-bottom:15px; font-size:14px;">
+                <i style="color:#888;">No items added yet.</i>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select id="nb-pct" class="sy-input" style="width:120px;">
+                    <option value="1">1%</option>
+                    <option value="5">5%</option>
+                    <option value="10">10%</option>
+                    <option value="20">20%</option>
+                    <option value="50" selected>50% (BOGO)</option>
+                    <option value="100">100%</option>
+                </select>
+                <button class="sy-btn" id="nb-create" type="button">Create Bundle</button>
+                <button class="sy-btn ghost" id="nb-generate" type="button">Auto-Find Slow Items</button>
+            </div>
+        </div>
+
+        <div class="sy-scroll"><table class="sy-table"><thead><tr><th>BUNDLE</th><th>PARTS</th><th>LIST PRICE</th><th>OFFER PRICE</th><th>DISCOUNT</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody id="bundle-table-body"></tbody></table></div>
+    </main>
+    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
+    <script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_bundles.js"></script>
+    <script src="../JavaScripts/support.js"></script>
 </body>
 </html>
