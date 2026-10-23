@@ -1,1 +1,12 @@
-﻿FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build`nWORKDIR /src`nCOPY ["Syscle.Web/Syscle.Web.csproj", "Syscle.Web/"]`nRUN dotnet restore "Syscle.Web/Syscle.Web.csproj"`nCOPY . .`nWORKDIR "/src/Syscle.Web"`nRUN dotnet publish "Syscle.Web.csproj" -c Release -o /app/publish`n`nFROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final`nWORKDIR /app`nCOPY --from=build /app/publish .`nENTRYPOINT ["dotnet", "Syscle.Web.dll"]
+﻿FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["Syscle.Web/Syscle.Web.csproj", "Syscle.Web/"]
+RUN dotnet restore "Syscle.Web/Syscle.Web.csproj"
+COPY . .
+WORKDIR "/src/Syscle.Web"
+RUN dotnet publish "Syscle.Web.csproj" -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "Syscle.Web.dll"]
