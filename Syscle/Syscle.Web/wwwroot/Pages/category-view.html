@@ -2,26 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Category</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/homepage_styles.css"><link rel="stylesheet" href="../Styles/category-view.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+  <title>Syscle - Category</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Shop &amp; Customize</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search products...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<main class="inventory-container sy-page">
-    <div class="inventory-header"><button class="back-btn" onclick="window.location.href='homepage.html'">&larr; Back to Storefront</button>
-    <h1 id="dynamic-category-title">Category</h1>
-    <select id="sort-select" class="sy-sort" aria-label="Sort"><option value="">Featured</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option><option value="name">Name: A to Z</option></select></div>
+<body data-area="shop" data-search="Search in this category...">
+  <main class="sy-page">
+    <a class="back-btn" href="homepage.html"><i class="bi bi-arrow-left" aria-hidden="true"></i> All categories</a>
+    <div class="sy-toolbar"><h1 id="dynamic-category-title">Category</h1>
+      <select id="sort-select" class="sy-sort" aria-label="Sort"><option value="">Featured</option><option value="top">Best selling</option><option value="rated">Top rated</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option><option value="name">Name: A to Z</option></select></div>
     <div class="sy-products" id="product-body"></div>
   </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/category.js"></script>
-    <script src="../JavaScripts/support.js"></script>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/category.js"></script><script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -2,26 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Store-front Config</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/homepage_styles.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+  <title>Syscle - Store-front Config</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<div class="sy-page sy-toolbar"><div><button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Store-front Config</h1><p class="sy-sub">Add bike types, give each a picture, then add the parts that belong to it.</p></div><button class="sy-btn accent" id="btn-add-category" type="button">+ Add Bike Category</button></div>
+<body data-area="admin">
+  
+<div class="sy-page sy-toolbar"><div><button class="back-btn" onclick="location.href='adminhomepage.html'"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</button><h1>Store-front Config</h1><p class="sy-sub">Add bike types, give each a picture, then add the parts that belong to it.</p></div><button class="sy-btn accent" id="btn-add-category" type="button">+ Add Bike Category</button></div>
   <main class="customer-dashboard"><div class="category-grid"></div></main>
   <div class="sy-modal" id="add-category-modal"><div class="sy-modal-box"><h3>Add Category</h3>
     <label>Category title</label><input type="text" id="new-category-name" maxlength="60">
     <label>Picture (optional, .jpg/.png/.webp under 2 MB)</label><input type="file" id="new-category-file" accept="image/*">
     <div class="sy-modal-actions"><button class="sy-btn ghost" id="close-modal-btn" type="button">Cancel</button><button class="sy-btn" id="btn-save-category" type="button">Save</button></div></div></div>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin.js"></script>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -6,6 +6,8 @@ services:
     command: sleep infinity
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Payments__TestMode: "true"
+      Security__DataKey: "codespace-demo-key-change-me-0123456789"
       ConnectionStrings__Syscle: "Server=db;Port=3306;Database=WebSyscleDB;User ID=root;Password=syscle;AllowPublicKeyRetrieval=True;"
     depends_on:
       - db

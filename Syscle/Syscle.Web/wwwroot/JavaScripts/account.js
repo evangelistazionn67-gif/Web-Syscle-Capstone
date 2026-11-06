@@ -43,7 +43,7 @@
         try {
             const rows = await api('/api/orders');
             $('history-body').innerHTML = rows.length ? rows.map(o => `<tr><td>${esc(o.code)}</td><td>${fmtDateTime(o.date)}</td><td>${esc(o.items)}</td><td>${peso(o.total)}</td><td>${fmtDate(o.pickup)}</td>
-        <td><span class="sy-chip ${o.status === 'Completed' ? 'ok' : o.status === 'Cancelled' ? 'bad' : 'warn'}">${esc(o.status)}</span></td>
+        <td>${statusChip(o.status)}</td>
         <td>${o.status === 'Pending' ? `<button class="sy-x" data-cancel="${o.id}">Cancel</button>` : '-'}</td></tr>`).join('')
                 : '<tr><td colspan="7" class="sy-empty">No orders yet.</td></tr>';
         } catch (e) { }

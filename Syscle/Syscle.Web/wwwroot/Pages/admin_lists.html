@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - Lists and rules</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin">
+<main class="sy-page">
+  <h1>Lists and rules</h1>
+  <p class="sy-sub">Everything the store can choose from, and the rules it follows, is kept here in the database. Nothing is fixed inside the program, so a change takes effect right away.</p>
+  <div class="sy-seg" id="ls-tabs" role="tablist"><button class="on" data-t="lists">Dropdown lists</button><button data-t="seasons">Seasons</button><button data-t="rules">Store rules</button><button data-t="audit">Activity log</button></div>
+  <section id="t-lists" class="sy-tabsec"></section>
+  <section id="t-seasons" class="sy-tabsec" hidden></section>
+  <section id="t-rules" class="sy-tabsec" hidden></section>
+  <section id="t-audit" class="sy-tabsec" hidden></section>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_lists.js"></script><script src="../JavaScripts/support.js"></script>
+</body></html>

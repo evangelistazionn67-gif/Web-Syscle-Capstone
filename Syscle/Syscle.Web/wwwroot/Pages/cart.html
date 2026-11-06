@@ -2,32 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Shopping Cart</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/cart_styles.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+  <title>Syscle - Shopping Cart</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Shop &amp; Customize</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search products...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="cart.html"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="nav-icon cart-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
+<body data-area="shop" class="cart-page">
+  
 <main class="cart-page-wrapper">
-    <div class="cart-header"><button onclick="window.location.href='homepage.html'" class="back-btn">&larr; Back to Storefront</button>
-    <h1 class="cart-page-title" id="cart-dynamic-title">(Username)&rsquo;s Cart</h1></div>
+    <div class="cart-header"><div><a href="homepage.html" class="back-btn"><i class="bi bi-arrow-left" aria-hidden="true"></i> Keep shopping</a>
+    <h1 class="cart-page-title" id="cart-dynamic-title">Your cart</h1></div></div>
     <div class="cart-main-panel">
       <div class="cart-items-window" id="cart-items-container"></div>
       <div class="cart-right-column">
         <div class="order-summary-box">
-          <h2>ORDER SUMMARY</h2><hr class="summary-divider">
+          <div class="sy-sumscroll">
+          <h2>Order summary</h2><hr class="summary-divider">
           <div class="summary-meta-grid">
-            <span id="summary-dynamic-name">(Username)</span><span class="right-align" id="purchase-date">(Date of Purchase)</span>
-            <div class="promo-input-group"><label>Promo Code:</label><input type="text" class="promo-input" id="promo-code"><button class="sy-btn small" id="promo-apply" type="button">Apply</button></div>
-            <span class="right-align">Pick-up: <input type="date" class="promo-input" id="pickup-date"></span>
+            <span><b id="summary-dynamic-name">(Username)</b><span class="right-align sy-muted" id="purchase-date">(Date)</span></span>
+            <div class="promo-input-group"><label for="promo-code">Promo code</label><input type="text" class="promo-input" id="promo-code" maxlength="30" placeholder="Enter code"><button class="sy-btn small" id="promo-apply" type="button">Apply</button></div>
+            <div id="promo-offers" class="sy-offers" hidden></div>
+            <div><label>How do you want to receive it?</label>
+              <div class="sy-choice" id="ful-choice"><label><input type="radio" name="ful" value="Pickup" checked> <span><b>Store pick-up</b><small>Free</small></span></label><label><input type="radio" name="ful" value="Delivery"> <span><b>Home delivery</b><small id="ful-fee">Fee applies</small></span></label></div></div>
+            <div id="delivery-box" hidden>
+              <label>Pin your delivery place</label>
+              <div id="del-map" class="sy-map" aria-label="Delivery map"></div>
+              <div class="sy-maprow"><button type="button" class="sy-btn ghost small" id="del-locate"><i class="bi bi-crosshair" aria-hidden="true"></i> Use my current location</button><span id="del-km" class="sy-sub">Tap the map to drop a pin on your place.</span></div>
+              <p class="sy-sub" style="margin:0 0 8px">Pay with GCash or PayMongo, or choose Cash and pay when it arrives (cash on delivery has a maximum order amount).</p>
+              <label for="del-address">Delivery address (add your house number and a landmark)</label><textarea id="del-address" class="promo-input" rows="2" maxlength="250" placeholder="House no., street, barangay, city"></textarea>
+              <label for="del-phone">Phone number for the rider</label><input type="tel" id="del-phone" class="promo-input" maxlength="20" placeholder="09XX XXX XXXX" inputmode="tel"></div>
+            <div><label for="pickup-date" id="date-label">Pick-up date</label><input type="date" class="promo-input" id="pickup-date"></div>
+            <div><label id="pay-label">Payment method</label><div id="pay-list" class="sy-paylist" role="radiogroup" aria-labelledby="pay-label"></div><select class="promo-input" id="payment-method" hidden aria-hidden="true"></select></div>
           </div>
-          <div class="promo-input-group" style="margin:8px 0"><label>Payment:</label><select class="promo-input" id="payment-method"></select></div>
           <div class="sy-gcash" id="gcash-box" hidden>
             <b>Pay with GCash</b>
             <ol><li>Send the total to <b id="gc-number"></b> <span id="gc-name"></span></li><li>Type the reference number from your GCash receipt below</li></ol>
@@ -35,17 +39,20 @@
             <input type="text" id="gc-ref" class="promo-input" maxlength="20" placeholder="GCash reference number" autocomplete="off">
             <small>The store checks your payment before it completes your order.</small>
           </div>
-          <p class="cost-breakdown-title">Cost Breakdown</p>
-          <div class="cost-breakdown-window" id="cost-breakdown-container"><div class="breakdown-headers"><span>--- Product Cost ---</span><span>--- Product Quantity ---</span></div></div>
-          <div class="total-cost-row"><strong id="total-cost">Total Cost: 0</strong></div>
-          <p class="order-number-text" id="order-number">ORDER NUMBER: (Generated after checkout)</p>
+          <p class="cost-breakdown-title">Cost breakdown</p>
+          <div class="cost-breakdown-window" id="cost-breakdown-container"></div>
+          </div>
+          <div class="sy-sumfoot">
+            <div class="total-cost-row"><strong id="total-cost">Total: 0</strong></div>
+            <p class="order-number-text" id="order-number">Your order number appears after checkout.</p>
+            <button class="proceed-checkout-btn" id="btn-checkout" type="button">Place order <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+          </div>
         </div>
-        <button class="proceed-checkout-btn" id="btn-checkout" type="button"><img src="../Icons_and_Buttons/Icon_Cart.jpg" alt="Cart" class="btn-cart-icon"> Place Order <span class="btn-arrow">&#8680;</span></button>
+        <p class="sy-sub" style="margin:0;text-align:center;font-size:13px">You will get an email confirmation and can track every step in <a href="orders.html">My orders</a>.</p>
       </div>
     </div>
   </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/cart.js"></script>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/cart.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

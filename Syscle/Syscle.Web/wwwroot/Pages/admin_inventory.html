@@ -2,37 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Inventory</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/admin_inventory.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+  <title>Syscle - Inventory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search inventory...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
-<main class="inventory-container sy-page">
-    <div class="sy-toolbar"><div><button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Inventory Management</h1></div>
-    <div class="sy-pactions"><select id="cat-filter" class="sy-input" style="width:auto;margin:0" aria-label="Filter by category"></select><span id="inventory-count"></span><button class="sy-btn btn-add-item" id="btn-add-item" type="button">+ ADD ITEM</button></div></div>
-    <div class="sy-products" id="inventory-grid"></div>
+<body data-area="admin" data-search="Search inventory...">
+  
+<main class="sy-page">
+    <div class="sy-toolbar"><div><h1>Inventory</h1><p class="sy-sub" style="margin:0">Every part in the shop: stock levels, sizes, colors and prices.</p></div>
+    <div class="sy-pactions"><a class="sy-btn ghost" href="admin_stock.html">Stock movement</a><button class="sy-btn accent btn-add-item" id="btn-add-item" type="button">+ Add item</button></div></div>
+    <div class="sy-cards" id="inv-stats"></div>
+    <div class="sy-filters"><select id="cat-filter" class="sy-input" aria-label="Filter by category"></select>
+      <select id="stock-filter" class="sy-input" aria-label="Filter by stock"><option value="">All stock levels</option><option value="in">In stock</option><option value="low">Low (5 or less)</option><option value="out">Out of stock</option></select>
+      <span id="inventory-count" class="sy-muted"></span></div>
+    <div class="sy-scroll"><table class="sy-table"><thead><tr><th>Item</th><th>Category</th><th>Sizes</th><th>Colors</th><th class="r">Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="inventory-grid"></tbody></table></div>
   </main>
   <div class="sy-modal" id="item-modal"><div class="sy-modal-box">
     <h3 id="item-modal-title">Add item</h3>
-    <label>Category</label><select id="f-cat"></select><a class="sy-sublink" href="admin_storefront.html">Need a new bike category? Create it in Store-front Config</a><label>Item type</label><input id="f-type" placeholder="e.g. Fork" maxlength="60">
+    <label>Category</label><select id="f-cat"></select><a class="sy-sublink" href="admin_storefront.html">Need a new bike category? Create it in Store-front Config</a><label>Item type</label><select id="f-type-sel"></select><input id="f-type" placeholder="Type the new item type" maxlength="60" style="display:none">
     <label>Product name</label><input id="f-name" maxlength="100"><label>Price (PHP)</label><input id="f-price" type="number" min="0" step="0.01">
     <label>Stock</label><input id="f-stock" type="number" min="0" step="1">
-    <label>Sizes (optional, separate with commas)</label><input id="f-sizes" placeholder="e.g. 26,27.5,29" maxlength="200">
+    <label>Sizes (optional)</label><select id="f-size-sel"></select><input id="f-sizes" placeholder="e.g. 26,27.5,29" maxlength="200">
+    <label for="f-desc">Description (what it is and what it is for)</label><textarea id="f-desc" rows="3" maxlength="2000"></textarea>
+    <label for="f-specs">Specifications (one per line, like "Weight: 450 g")</label><textarea id="f-specs" rows="4" maxlength="2000" placeholder="Material: Alloy&#10;Hub width: 100 mm&#10;Weight: 450 g"></textarea>
+    <label>Fits these bike types</label><div id="f-fit" class="sy-fitbox"></div>
+    <label for="f-sku">SKU (printed on the QR label; leave empty to make one)</label><input id="f-sku" maxlength="30" placeholder="SYS-00001">
+    <label for="f-cost">Cost price (optional, only the admin sees it; used for the profit estimate)</label><input id="f-cost" type="number" min="0" step="0.01">
     <label>Picture (optional, .jpg/.png/.webp under 3 MB)</label><input id="f-image" type="file" accept="image/*"><img id="f-preview" class="sy-preview" alt="" style="display:none">
     <label>Color Variants (Optional)</label>
     <div id="variant-container" style="margin-bottom:10px;"></div>
     <button type="button" class="sy-btn small ghost" id="btn-add-variant" style="margin-bottom:15px;">+ Add Color Variant</button>
     <div class="sy-modal-actions"><button class="sy-btn ghost" id="f-cancel" type="button">Cancel</button><button class="sy-btn" id="f-save" type="button">Save</button></div>
 </div></div>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_inventory.js"></script>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_inventory.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

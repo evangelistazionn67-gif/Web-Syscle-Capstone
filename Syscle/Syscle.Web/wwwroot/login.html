@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web-Syscle - Log in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/Styles/ui.css">
+</head>
+<body data-area="auth">
+<div class="sy-auth">
+  <aside class="sy-auth-art"><a class="sy-logo" href="/index.html"><b>Web<i>-</i>Syscle</b><span>Shop &amp; Customize</span></a>
+    <div><h2>Ride more.<br><em>Wait less.</em></h2><p>Order bicycle parts online and follow every step until they are ready for pick-up.</p>
+      <ul><li>Live order tracking</li><li>Email updates for every step</li><li>Pay with cash or GCash</li></ul></div>
+    <small style="color:#64748b">&copy; Web-Syscle</small></aside>
+  <section class="sy-auth-form"><div class="sy-auth-box">
+    <a class="back-btn sy-authback" href="/Pages/homepage.html"><i class="bi bi-arrow-left" aria-hidden="true"></i> Back to shop</a>
+    <div class="sy-note-in" id="sy-notice" role="alert"></div>
+
+
+        <div class="form-container" id="login-container" style="display: block;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Welcome back</h1>
+                </div>
+            </div>
+
+            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
+                <div class="input-group">
+                    <label for="login-email">Email | Username</label>
+                    <input type="text" id="login-email" name="login-email" maxlength="50" autocomplete="username">
+                </div>
+
+                <div class="input-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" name="login-password" maxlength="64" autocomplete="current-password">
+                </div>
+
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember"> Remember Me
+                    </label>
+                    <a href="#" id="link-to-forgot" class="link-text">Forgot Password</a>
+                </div>
+
+                <button type="submit" class="pill-btn" id="btn-login">LOGIN</button>
+
+                <div class="switch-form-text">
+                    Don't Have an Account? <a href="#" id="link-to-register" class="link-text">Sign Up</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="register-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Create account</h1>
+                </div>
+            </div>
+
+            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
+                <div class="input-group">
+                    <label for="reg-username">Username</label>
+                    <input type="text" id="reg-username" name="reg-username" maxlength="14" autocomplete="username">
+                </div>
+
+                <div class="input-group">
+                    <label for="reg-email">Email Address</label>
+                    <input type="email" id="reg-email" name="reg-email" maxlength="50">
+                </div>
+
+                <div class="input-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" name="reg-password" maxlength="14" autocomplete="new-password">
+                </div>
+
+                <div class="input-group">
+                    <label for="reg-confirm">Confirm Password</label>
+                    <input type="password" id="reg-confirm" name="reg-confirm" maxlength="14" autocomplete="new-password">
+                </div>
+
+                <button type="submit" class="pill-btn" id="btn-register">SIGN UP</button>
+
+                <div class="switch-form-text">
+                    Already have an Account? <a href="#" id="link-to-login-from-reg" class="link-text">Login Here</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="forgot-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Reset Password</h1>
+                </div>
+            </div>
+
+            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
+                <p class="lead">
+                    Enter your email address and we'll send you instructions to reset your password.
+                </p>
+
+                <div class="input-group">
+                    <label for="forgot-email">Email Address</label>
+                    <input type="email" id="forgot-email" name="forgot-email" maxlength="50">
+                </div>
+
+                <button type="submit" class="pill-btn" id="btn-reset">SEND LINK</button>
+
+                <div class="switch-form-text">
+                    No access to your email? <a href="#" id="link-to-sms" class="link-text">Reset with my mobile number</a>
+                </div>
+                <div class="switch-form-text">
+                    Remembered your password? <a href="#" id="link-to-login-from-forgot" class="link-text">Back to Login</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="sms-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Reset by SMS</h1>
+                </div>
+            </div>
+            <form class="auth-form" onsubmit="return false;">
+                <div id="sms-step1">
+                    <p class="lead">
+                        Enter the mobile number saved in your account. We will text you a 6-digit code.
+                    </p>
+                    <div class="input-group">
+                        <label for="sms-phone">Mobile Number</label>
+                        <input type="tel" id="sms-phone" maxlength="14" placeholder="09171234567" inputmode="tel">
+                    </div>
+                    <button type="submit" class="pill-btn" id="btn-sms-send">SEND CODE</button>
+                </div>
+                <div id="sms-step2" style="display: none;">
+                    <p class="lead">
+                        Type the code we sent, then choose a new password (8 to 14 characters).
+                    </p>
+                    <div class="input-group">
+                        <label for="sms-code">6-digit Code</label>
+                        <input type="text" id="sms-code" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
+                    </div>
+                    <div class="input-group">
+                        <label for="sms-new">New Password</label>
+                        <input type="password" id="sms-new" maxlength="14" autocomplete="new-password">
+                    </div>
+                    <div class="input-group">
+                        <label for="sms-confirm">Confirm New Password</label>
+                        <input type="password" id="sms-confirm" maxlength="14" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="pill-btn" id="btn-sms-reset">CHANGE PASSWORD</button>
+                </div>
+                <div class="switch-form-text">
+                    <a href="#" id="link-to-login-from-sms" class="link-text">Back to Login</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="form-container" id="twofa-container" style="display: none;">
+            <div class="header-row">
+                <div class="logo-area">
+                    <h2>Web-Syscle</h2>
+                    <p>Shop & Customize</p>
+                </div>
+                <div class="welcome-text">
+                    <h1>Two-Factor Auth</h1>
+                </div>
+            </div>
+            <form class="auth-form" onsubmit="return false;">
+                <p class="lead">Enter the 6-digit code from your Authenticator app.</p>
+                <div class="input-group">
+                    <label for="login-2fa">2FA Code</label>
+                    <input type="text" id="login-2fa" autocomplete="off" maxlength="6" inputmode="numeric">
+                </div>
+                <button type="submit" class="pill-btn" id="btn-login-2fa">VERIFY</button>
+            </form>
+        </div>
+
+    
+    <a class="sy-guestlink" href="/Pages/homepage.html">Just looking? Continue as guest <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+  </div></section>
+</div>
+<script src="/login.js"></script>
+</body>
+</html>

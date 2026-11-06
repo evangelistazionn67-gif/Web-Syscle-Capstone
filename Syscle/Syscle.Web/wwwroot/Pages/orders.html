@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - My Orders</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="shop">
+<main class="sy-page">
+  <div class="sy-toolbar"><div><h1>My orders</h1><p class="sy-sub" style="margin:0">Follow each order from the moment you place it until it is ready for pick-up.</p></div>
+    <div class="sy-seg" id="ord-tabs" role="tablist"><button class="on" data-f="active">Active</button><button data-f="done">Completed</button><button data-f="cancel">Cancelled</button><button data-f="all">All</button></div></div>
+  <div id="ord-alerts"></div>
+  <div class="sy-orders" id="ord-list"><div class="sy-empty">Loading your orders...</div></div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/orders.js"></script><script src="../JavaScripts/support.js"></script>
+</body></html>

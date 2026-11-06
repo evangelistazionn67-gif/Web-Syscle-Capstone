@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - QR labels</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin" data-search="Search items...">
+<main class="sy-page">
+  <div class="sy-toolbar no-print"><div><h1>QR labels</h1><p class="sy-sub" style="margin:0">Print a QR label for each item. At the counter, scanning the label adds the item to a walk-in sale. The code is the item's SKU.</p></div>
+    <div class="sy-pactions"><button class="sy-btn ghost small" id="lb-all" type="button">Select all</button><button class="sy-btn ghost small" id="lb-none" type="button">Clear</button><button class="sy-btn accent" id="lb-print" type="button"><i class="bi bi-printer" aria-hidden="true"></i> Print labels</button></div></div>
+  <div class="sy-labels" id="lb-grid"><div class="sy-empty">Loading items...</div></div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script>
+<script>
+(async function () {
+  const grid = document.getElementById('lb-grid'); let items = [], q = '';
+  try { items = await api('/api/admin/products'); } catch (e) { grid.innerHTML = '<div class="sy-empty">Could not load items.</div>'; return; }
+  const sel = new Set(items.map(i => i.id));
+  const paint = () => {
+    const list = items.filter(i => (i.name + ' ' + (i.sku || '')).toLowerCase().includes(q));
+    grid.innerHTML = list.map(i => `<label class="sy-label${sel.has(i.id) ? '' : ' off'}"><input type="checkbox" class="no-print" data-id="${i.id}"${sel.has(i.id) ? ' checked' : ''}>
+      ${i.sku ? `<img src="/api/qr?text=${encodeURIComponent(i.sku)}" alt="QR code ${esc(i.sku)}" width="120" height="120" loading="lazy">` : '<div class="sy-noqr">No SKU</div>'}<b>${esc(i.name)}</b><span>${esc(i.sku || '')}</span><span>${peso(i.price)}</span></label>`).join('') || '<div class="sy-empty">No items.</div>';
+  };
+  grid.addEventListener('change', e => { const id = +e.target.dataset.id; if (!id) return; e.target.checked ? sel.add(id) : sel.delete(id); e.target.closest('.sy-label').classList.toggle('off', !e.target.checked); });
+  document.getElementById('lb-all').onclick = () => { items.forEach(i => sel.add(i.id)); paint(); };
+  document.getElementById('lb-none').onclick = () => { sel.clear(); paint(); };
+  document.getElementById('lb-print').onclick = () => window.print();
+  initHeader(t => { q = t; paint(); }); paint();
+})();
+</script>
+</body></html>

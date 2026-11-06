@@ -17,7 +17,7 @@
         <td>${fmtDate(r.date)}</td>
         <td>${esc(r.product)}</td>
         <td>${esc(r.username)}</td>
-        <td><b style="color:#ffb400;">${r.rating} ★</b></td>
+        <td><b style="color:#ffb400;">${r.rating} <i class="bi bi-star-fill" aria-hidden="true"></i></b></td>
         <td style="text-align:left; max-width:400px;">${esc(r.comment || '')}</td>
         <td><button class="sy-x" data-del="1">Delete</button></td>
       </tr>

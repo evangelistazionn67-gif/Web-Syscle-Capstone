@@ -11,6 +11,10 @@
     try {
         const list = await api('/api/admin/payment-methods');
         btns.forEach(b => { const m = list.find(x => x.code === b.dataset.code); b.classList.toggle('active', !!(m && m.isOn)); paint(b); });
+        [['paymongo', 'PayMongo'], ['paypal', 'PayPal']].forEach(([code, name]) => {
+            const m = list.find(x => x.code === code), el = $('st-' + code); if (!el) return;
+            el.textContent = m && m.ready ? name + ' keys are set. Customers can pay online while this is ON.' : name + ' is not connected yet: add its keys in appsettings.json (see PAYPAL_SETUP.md). Customers will not see it until then.';
+        });
         const g = list.find(x => x.code === 'gcash');
         if (g && $('gcash-number')) { $('gcash-number').value = g.accountNumber; $('gcash-name').value = g.accountName; }
 

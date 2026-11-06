@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+.git/
+.github/
+.devcontainer/
+.vscode/
+docs/
+*.md
+**/appsettings.Development.json
+.env

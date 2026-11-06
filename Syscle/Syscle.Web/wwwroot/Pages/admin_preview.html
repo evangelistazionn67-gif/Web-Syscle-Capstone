@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - View as customer</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin">
+<main class="sy-page sy-previewpage">
+  <div class="sy-toolbar"><div><h1>View as customer</h1><p class="sy-sub" style="margin:0">This is the store exactly as a visitor sees it, including the promo pop-up. Check your new items, promo codes and bundles here after you add them.</p></div>
+    <div class="sy-pactions"><div class="sy-seg" id="pv-dev" role="group" aria-label="Screen size"><button class="on" data-w="100%"><i class="bi bi-display" aria-hidden="true"></i> Desktop</button><button data-w="820px"><i class="bi bi-tablet" aria-hidden="true"></i> Tablet</button><button data-w="390px"><i class="bi bi-phone" aria-hidden="true"></i> Phone</button></div>
+      <select id="pv-page" class="sy-input" aria-label="Page"><option value="/Pages/homepage.html?preview=1">Shop home (with pop-up)</option><option value="/Pages/homepage.html?preview=1#bundles">Bundle deals</option></select>
+      <button class="sy-btn ghost small" id="pv-reload" type="button"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Reload</button><a class="sy-btn ghost small" id="pv-open" target="_blank" rel="noopener" href="/Pages/homepage.html">Open in a new tab</a></div></div>
+  <div class="sy-frame"><iframe id="pv-frame" title="Customer view of the store" src="/Pages/homepage.html?preview=1"></iframe></div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script>
+<script>
+(async function () {
+  const f = document.getElementById('pv-frame'), pg = document.getElementById('pv-page');
+  try { (await api('/api/categories')).forEach(c => pg.insertAdjacentHTML('beforeend', `<option value="/Pages/category-view.html?preview=1&cat=${encodeURIComponent(c.name)}">Category: ${esc(c.name)}</option>`)); } catch (e) { }
+  document.getElementById('pv-dev').addEventListener('click', e => { const b = e.target.closest('[data-w]'); if (!b) return; document.querySelectorAll('#pv-dev button').forEach(x => x.classList.toggle('on', x === b)); f.style.width = b.dataset.w; });
+  pg.addEventListener('change', () => { f.src = pg.value; document.getElementById('pv-open').href = pg.value.replace('preview=1&', '').replace('?preview=1', ''); });
+  document.getElementById('pv-reload').addEventListener('click', () => { f.contentWindow.location.reload(); });
+  if (location.hash === '#bundles') { pg.value = pg.options[1].value; f.src = pg.value; }
+  initHeader(null);
+})();
+</script>
+</body></html>

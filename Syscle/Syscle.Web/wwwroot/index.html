@@ -1,189 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Syscle - Authentication</title>
-    <link rel="stylesheet" href="Styles/LRFP_styles.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web-Syscle - Bicycle parts, order online, pick up in store</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/Styles/ui.css">
 </head>
-<body>
-    <div class="background-wrapper">
+<body data-area="shop" data-search="Search bicycle parts...">
+<main>
+  <section class="sy-hero"><div class="sy-hero-in">
+    <div><p class="sy-kicker">Shop &amp; Customize</p>
+      <h1>Build the ride <em>you want.</em></h1>
+      <p>Rims, tires, derailleurs, cockpit parts and more. Browse freely, order online, then pick up at the store. Pay in cash or GCash.</p>
+      <div class="cta"><a class="sy-btn accent lg" href="/Pages/homepage.html">Shop all parts</a><a class="sy-btn ghost lg" href="#how">How it works</a></div></div>
+    <div class="sy-hero-art" id="hero-art" aria-hidden="true"></div>
+  </div></section>
+  <div class="sy-trust"><div>Genuine parts</div><div>Store pick-up</div><div>Cash or GCash</div><div>Live order tracking</div></div>
 
-        <div class="form-container" id="login-container" style="display: block;">
-            <div class="header-row">
-                <div class="logo-area">
-                    <h2>Web-Syscle</h2>
-                    <p>Shop & Customize</p>
-                </div>
-                <div class="welcome-text">
-                    <h1>Hello, Welcome to Syscle!</h1>
-                </div>
-            </div>
+  <section class="sy-section"><header><div><h2>Shop by bike type</h2><p>Pick the kind of bike you are working on.</p></div><a class="sy-btn ghost small" href="/Pages/homepage.html">View everything</a></header>
+    <div class="category-grid" id="cat-grid"><div class="sy-empty">Loading...</div></div></section>
 
-            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
-                <div class="input-group">
-                    <label for="login-email">Email | Username</label>
-                    <input type="text" id="login-email" name="login-email" maxlength="50" autocomplete="username">
-                </div>
+  <div id="promo-strip" class="sy-section" style="padding-bottom:0"></div>
+  <section class="sy-section" id="featured" hidden><header><div><h2>Featured</h2><p>Staff picks from the shop.</p></div></header>
+    <div class="sy-products" id="featured-products"></div></section>
 
-                <div class="input-group">
-                    <label for="login-password">Password</label>
-                    <input type="password" id="login-password" name="login-password" maxlength="64" autocomplete="current-password">
-                </div>
+  <section class="sy-section"><header><div><h2>Best sellers</h2><p>What other riders are buying right now.</p></div></header>
+    <div class="sy-products" id="top-products"></div></section>
 
-                <div class="form-options">
-                    <label class="remember-me">
-                        <input type="checkbox" name="remember"> Remember Me
-                    </label>
-                    <a href="#" id="link-to-forgot" class="link-text">Forgot Password</a>
-                </div>
+  <section class="sy-section" id="how"><header><div><h2>How ordering works</h2><p>No account needed to look around. Log in only when you are ready to buy.</p></div></header>
+    <div class="sy-steps">
+      <div class="sy-step"><i>1</i><b>Browse &amp; pick</b><p>Choose parts, sizes and colors from the dropdowns.</p></div>
+      <div class="sy-step"><i>2</i><b>Place your order</b><p>Choose a pick-up date and pay with cash or GCash. You get an email right away.</p></div>
+      <div class="sy-step"><i>3</i><b>We prepare it</b><p>Follow each step live: Pending, Preparing, Ready for pick-up.</p></div>
+      <div class="sy-step"><i>4</i><b>Pick up in store</b><p>Show your order number and ride away.</p></div>
+    </div></section>
 
-                <button type="submit" class="pill-btn" id="btn-login">LOGIN</button>
-
-                <div class="switch-form-text">
-                    Don't Have an Account? <a href="#" id="link-to-register" class="link-text">Sign Up</a>
-                </div>
-            </form>
-        </div>
-
-        <div class="form-container" id="register-container" style="display: none;">
-            <div class="header-row">
-                <div class="logo-area">
-                    <h2>Web-Syscle</h2>
-                    <p>Shop & Customize</p>
-                </div>
-                <div class="welcome-text">
-                    <h1>Create Your Account</h1>
-                </div>
-            </div>
-
-            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
-                <div class="input-group">
-                    <label for="reg-username">Username</label>
-                    <input type="text" id="reg-username" name="reg-username" maxlength="14" autocomplete="username">
-                </div>
-
-                <div class="input-group">
-                    <label for="reg-email">Email Address</label>
-                    <input type="email" id="reg-email" name="reg-email" maxlength="50">
-                </div>
-
-                <div class="input-group">
-                    <label for="reg-password">Password</label>
-                    <input type="password" id="reg-password" name="reg-password" maxlength="14" autocomplete="new-password">
-                </div>
-
-                <div class="input-group">
-                    <label for="reg-confirm">Confirm Password</label>
-                    <input type="password" id="reg-confirm" name="reg-confirm" maxlength="14" autocomplete="new-password">
-                </div>
-
-                <button type="submit" class="pill-btn" id="btn-register">SIGN UP</button>
-
-                <div class="switch-form-text">
-                    Already have an Account? <a href="#" id="link-to-login-from-reg" class="link-text">Login Here</a>
-                </div>
-            </form>
-        </div>
-
-        <div class="form-container" id="forgot-container" style="display: none;">
-            <div class="header-row">
-                <div class="logo-area">
-                    <h2>Web-Syscle</h2>
-                    <p>Shop & Customize</p>
-                </div>
-                <div class="welcome-text">
-                    <h1>Reset Password</h1>
-                </div>
-            </div>
-
-            <form class="auth-form" action="#" method="POST" onsubmit="return false;">
-                <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">
-                    Enter your email address and we'll send you instructions to reset your password.
-                </p>
-
-                <div class="input-group">
-                    <label for="forgot-email">Email Address</label>
-                    <input type="email" id="forgot-email" name="forgot-email" maxlength="50">
-                </div>
-
-                <button type="submit" class="pill-btn" id="btn-reset">SEND LINK</button>
-
-                <div class="switch-form-text">
-                    No access to your email? <a href="#" id="link-to-sms" class="link-text">Reset with my mobile number</a>
-                </div>
-                <div class="switch-form-text">
-                    Remembered your password? <a href="#" id="link-to-login-from-forgot" class="link-text">Back to Login</a>
-                </div>
-            </form>
-        </div>
-
-        <div class="form-container" id="sms-container" style="display: none;">
-            <div class="header-row">
-                <div class="logo-area">
-                    <h2>Web-Syscle</h2>
-                    <p>Shop & Customize</p>
-                </div>
-                <div class="welcome-text">
-                    <h1>Reset by SMS</h1>
-                </div>
-            </div>
-            <form class="auth-form" onsubmit="return false;">
-                <div id="sms-step1">
-                    <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">
-                        Enter the mobile number saved in your account. We will text you a 6-digit code.
-                    </p>
-                    <div class="input-group">
-                        <label for="sms-phone">Mobile Number</label>
-                        <input type="tel" id="sms-phone" maxlength="14" placeholder="09171234567" inputmode="tel">
-                    </div>
-                    <button type="submit" class="pill-btn" id="btn-sms-send">SEND CODE</button>
-                </div>
-                <div id="sms-step2" style="display: none;">
-                    <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #000;">
-                        Type the code we sent, then choose a new password (8 to 14 characters).
-                    </p>
-                    <div class="input-group">
-                        <label for="sms-code">6-digit Code</label>
-                        <input type="text" id="sms-code" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
-                    </div>
-                    <div class="input-group">
-                        <label for="sms-new">New Password</label>
-                        <input type="password" id="sms-new" maxlength="14" autocomplete="new-password">
-                    </div>
-                    <div class="input-group">
-                        <label for="sms-confirm">Confirm New Password</label>
-                        <input type="password" id="sms-confirm" maxlength="14" autocomplete="new-password">
-                    </div>
-                    <button type="submit" class="pill-btn" id="btn-sms-reset">CHANGE PASSWORD</button>
-                </div>
-                <div class="switch-form-text">
-                    <a href="#" id="link-to-login-from-sms" class="link-text">Back to Login</a>
-                </div>
-            </form>
-        </div>
-
-        <div class="form-container" id="twofa-container" style="display: none;">
-            <div class="header-row">
-                <div class="logo-area">
-                    <h2>Web-Syscle</h2>
-                    <p>Shop & Customize</p>
-                </div>
-                <div class="welcome-text">
-                    <h1>Two-Factor Auth</h1>
-                </div>
-            </div>
-            <form class="auth-form" onsubmit="return false;">
-                <p style="margin-bottom: 20px; font-size: 14px; font-weight: bold;">Enter the 6-digit code from your Authenticator app.</p>
-                <div class="input-group">
-                    <label for="login-2fa">2FA Code</label>
-                    <input type="text" id="login-2fa" autocomplete="off" maxlength="6" inputmode="numeric">
-                </div>
-                <button type="submit" class="pill-btn" id="btn-login-2fa">VERIFY</button>
-            </form>
-        </div>
-
-    </div>
-    <script src="index.js"></script>
+  <section class="sy-cta-band"><div><div><h2>Ready to upgrade your bike?</h2><p>Create a free account to order, track and get promo codes.</p></div>
+    <div class="cta" id="cta-btns"><a class="sy-btn accent lg" href="/login.html?signup=1">Create account</a><a class="sy-btn ghost lg" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.4)" href="/login.html">Log in</a></div></div></section>
+</main>
+<script src="/JavaScripts/shell.js"></script><script src="/JavaScripts/api.js"></script><script src="/JavaScripts/support.js"></script>
+<script>
+(async function () {
+  let cats = [], items = [];
+  try { [cats, items] = await Promise.all([api('/api/categories'), api('/api/products')]); } catch (e) { document.getElementById('cat-grid').innerHTML = '<div class="sy-empty">The shop is waking up. Please refresh in a few seconds.</div>'; return; }
+  document.getElementById('cat-grid').innerHTML = cats.map(c => `<a class="category-card" href="/Pages/category-view.html?cat=${encodeURIComponent(c.name)}" style="${c.image ? 'background-image:url(' + JSON.stringify(c.image).replace(/"/g, "'") + ')' : ''}"><h3>${esc(c.name)}</h3></a>`).join('') || '<div class="sy-empty">No categories yet.</div>';
+  const best = items.filter(p => p.stock > 0).sort((a, b) => (b.sold || 0) - (a.sold || 0)).slice(0, 8);
+  const box = document.getElementById('top-products'); box.innerHTML = best.map(productCard).join('') || '<div class="sy-empty">Products are coming soon.</div>';
+  bindProductCards(box, () => items);
+  try {
+    const fe = items.filter(p => p.featured && p.stock > 0).slice(0, 8);
+    if (fe.length) { const fb = document.getElementById('featured-products'); fb.innerHTML = fe.map(productCard).join(''); document.getElementById('featured').hidden = false; bindProductCards(fb, () => items); }
+    const pr = await api('/api/promotions'), strip = document.getElementById('promo-strip');
+    if (pr.codes.length) strip.innerHTML = pr.codes.map(c => `<div class="sy-banner info"><b>${esc(c.season)} promo:</b> use code <b>${esc(c.code)}</b> for ${c.percent}% off${c.endsAt ? ' until ' + esc(new Date(c.endsAt + 'T00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })) : ''}. Log in to use it.</div>`).join('');
+  } catch (e) { /* optional */ }
+  document.getElementById('hero-art').innerHTML = best.filter(p => p.image).slice(0, 4).map(p => `<div class="tile"><img src="${esc(p.image)}" alt=""><b>${esc(p.itemType)}</b><span>${peso(p.price)}</span></div>`).join('');
+  initHeader(null);
+  SY_READY.then(me => { if (me) document.getElementById('cta-btns').innerHTML = '<a class="sy-btn accent lg" href="/Pages/homepage.html">Continue shopping</a><a class="sy-btn lg" style="background:transparent;border-color:rgba(255,255,255,.4)" href="/Pages/orders.html">My orders</a>'; });
+})();
+</script>
 </body>
 </html>

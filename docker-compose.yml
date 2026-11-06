@@ -1,0 +1,37 @@
+# Run the whole shop with:  docker compose up --build   (then open http://localhost:8080)
+# Copy .env.example to .env first and put your own values in it.
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__Syscle: "Server=db;Port=3306;Database=WebSyscleDB;User ID=root;Password=${MYSQL_ROOT_PASSWORD};AllowPublicKeyRetrieval=True;"
+      Security__DataKey: "${SECURITY_DATA_KEY:-}"
+      Seed__AdminPassword: "${ADMIN_PASSWORD}"
+      Payments__TestMode: "${PAYMENTS_TEST_MODE:-false}"
+      EmailSettings__SendGridApiKey: "${SENDGRID_API_KEY:-}"
+      PayMongo__SecretKey: "${PAYMONGO_SECRET_KEY:-}"
+      PayMongo__WebhookSecret: "${PAYMONGO_WEBHOOK_SECRET:-}"
+      Lalamove__ApiKey: "${LALAMOVE_API_KEY:-}"
+      Lalamove__Secret: "${LALAMOVE_SECRET:-}"
+      Lalamove__Mode: "${LALAMOVE_MODE:-sandbox}"
+      PayPal__ClientId: "${PAYPAL_CLIENT_ID:-}"
+      PayPal__Secret: "${PAYPAL_SECRET:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  dbdata:

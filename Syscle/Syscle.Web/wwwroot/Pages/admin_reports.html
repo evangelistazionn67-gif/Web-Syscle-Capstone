@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - Reports</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin">
+<main class="sy-page">
+  <div class="sy-toolbar"><div><h1>Sales reports</h1><p class="sy-sub" style="margin:0">Daily, weekly, monthly and yearly sales, compared with the period right before.</p></div>
+    <div class="sy-pactions no-print"><button class="sy-btn ghost small" id="rp-csv" type="button">Export CSV</button><button class="sy-btn small" id="rp-print" type="button">Print / save as PDF</button></div></div>
+  <div class="sy-filters no-print"><div class="sy-seg" id="rp-seg"><button data-p="daily" class="on">Daily</button><button data-p="weekly">Weekly</button><button data-p="monthly">Monthly</button><button data-p="yearly">Yearly</button></div>
+    <label for="rp-from">From</label><input type="date" id="rp-from" class="sy-input"><label for="rp-to">To</label><input type="date" id="rp-to" class="sy-input"><button class="sy-btn" id="rp-go" type="button">Apply</button><button class="sy-btn ghost" id="rp-reset" type="button">Reset</button></div>
+  <p class="sy-sub" id="rp-range"></p>
+  <div id="rp-body"><div class="sy-empty">Loading report...</div></div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_reports.js"></script><script src="../JavaScripts/support.js"></script>
+</body></html>

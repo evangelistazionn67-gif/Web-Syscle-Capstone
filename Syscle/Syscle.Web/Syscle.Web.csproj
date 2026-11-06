@@ -12,4 +12,8 @@
     <PackageReference Include="QRCoder" Version="1.8.1" />
     <PackageReference Include="SendGrid" Version="9.29.3" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\Database\schema.sql" Link="Database\schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Database\seed.sql" Link="Database\seed.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

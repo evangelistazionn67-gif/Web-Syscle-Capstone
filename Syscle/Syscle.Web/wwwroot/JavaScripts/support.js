@@ -1,7 +1,7 @@
 // HELP WINDOW: opens from the round support button on every page.
 // Customers get quick answers, store contact details, quick links and a chat with the store.
 // Admins get a shortcut to the messages inbox and a short how-to guide.
-(function () {
+(window.SY_READY || Promise.resolve()).then(function () {
     const btn = document.querySelector('.support-btn');
     if (!btn || typeof api !== 'function') return;
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '../Styles/support.css'; document.head.appendChild(css);
@@ -20,11 +20,11 @@
     const FAQ_CUSTOMER = [
         { q: 'How do I place an order?', a: () => '<p>1. Browse the shop and tap <b>Buy</b> on a part (pick the size or colour if it has one).</p><p>2. Open your <b>cart</b>, choose a pick-up date and a payment method, then tap <b>Place Order</b>.</p><p>3. Come to the store on your pick-up date. Your order number is shown after checkout and in <b>My account</b>.</p>' },
         { q: 'How do I pay with GCash?', a: () => '<p>Choose <b>GCash</b> in your cart. The store’s GCash number' + ' (and QR code, if the store turned it on) appears there.</p><p>Send the total in your GCash app, then type the <b>reference number</b> from your GCash receipt before you tap Place Order. The store checks it and completes your order.</p><p>You can also choose <b>Cash</b> and pay when you pick up.</p>' },
-        { q: 'How do I set up 2FA (authenticator app)?', a: () => '<p>Go to <b>My account → Security (2FA) → Setup 2FA</b>.</p><p>1. Install Google Authenticator or Authy on your phone.<br>2. Scan the QR code (or type the key).<br>3. Type the 6-digit code the app shows and tap <b>Verify &amp; Enable</b>.</p><p>After that, logging in asks for your password and then a code from the app. Keep your phone’s clock on automatic time.</p>' },
-        { q: 'I forgot my password', a: () => '<p>On the login page tap <b>Forgot Password</b>.</p><p>• Enter your email to get a reset link, or<br>• tap <b>Reset with my mobile number</b> to get a 6-digit code by SMS.</p><p>For the SMS option, save your mobile number first in <b>My account → Contact Number</b>.</p>' },
+        { q: 'How do I set up 2FA (authenticator app)?', a: () => '<p>Go to <b>My account > Security (2FA) > Setup 2FA</b>.</p><p>1. Install Google Authenticator or Authy on your phone.<br>2. Scan the QR code (or type the key).<br>3. Type the 6-digit code the app shows and tap <b>Verify &amp; Enable</b>.</p><p>After that, logging in asks for your password and then a code from the app. Keep your phone’s clock on automatic time.</p>' },
+        { q: 'I forgot my password', a: () => '<p>On the login page tap <b>Forgot Password</b>.</p><p>• Enter your email to get a reset link, or<br>• tap <b>Reset with my mobile number</b> to get a 6-digit code by SMS.</p><p>For the SMS option, save your mobile number first in <b>My account > Contact Number</b>.</p>' },
         { q: 'How do promo codes work?', a: () => '<p>Type the code in the <b>Promo Code</b> box in your cart and tap <b>Apply</b>. The discount is taken off your total. Ask the store if you need a code.</p>' },
         { q: 'What is Buy 1 Get 1 / Special offers?', a: () => '<p>The home page shows bundle deals and <b>Buy 1 Get 1</b> offers at a lower price. Tap one to add all its parts to your cart at the offer price while it is available.</p>' },
-        { q: 'Can I cancel my order?', a: () => '<p>Yes, while it is still <b>Pending</b>. Go to <b>My account → My Orders</b> and tap <b>Cancel</b>. Completed orders can’t be cancelled online, so send the store a message.</p>' },
+        { q: 'Can I cancel my order?', a: () => '<p>Yes, while it is still <b>Pending</b>. Go to <b>My account > My Orders</b> and tap <b>Cancel</b>. Completed orders can’t be cancelled online, so send the store a message.</p>' },
         { q: 'Where and when do I pick up?', a: () => '<p>Orders are picked up at the store on the date you chose.</p>' + sellerBlock() + (store.PickupNote ? '<p>' + esc(store.PickupNote) + '</p>' : '') }
     ];
     const FAQ_ADMIN = [
@@ -115,4 +115,4 @@
         checkUnread(); poll = setInterval(checkUnread, 30000);
         if (location.hash === '#help') open();
     })();
-})();
+});

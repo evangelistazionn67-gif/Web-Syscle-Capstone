@@ -4,57 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Syscle - Transactions History</title>
-    <link rel="stylesheet" href="../Styles/global.css">
-    <link rel="stylesheet" href="../Styles/admin_transaction_history.css">
-    <link rel="stylesheet" href="../Styles/shop_additions.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-    <header class="top-nav">
-        <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-        <div class="search-container">
-            <input type="text" id="main-search-input" class="search-bar" placeholder="Search orders...">
-            <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-            <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-        </div>
-        <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-    </header>
+<body data-area="admin" data-search="Search orders...">
+    
     <main class="sy-page">
-        <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Transactions History</h1>
-        <div class="sy-cards"><div class="sy-stat">TOTAL<b id="val-total">0</b></div><div class="sy-stat">COMPLETED<b id="val-completed">0</b></div><div class="sy-stat">PENDING<b id="val-pending">0</b></div><div class="sy-stat">CANCELLED<b id="val-cancelled">0</b></div></div>
-
+        <div class="sy-toolbar"><div><h1>Orders &amp; transactions</h1><p class="sy-sub" style="margin:0">Move each order through its steps. Customers are notified (and emailed) at every step.</p></div>
+        <div class="sy-pactions"><button class="sy-btn small" id="btn-scan" type="button"><i class="bi bi-qr-code-scan" aria-hidden="true"></i> Scan order QR</button><button class="sy-btn ghost small" id="btn-export" type="button">Export CSV</button></div></div>
+        <div class="sy-cards"><div class="sy-stat">Total<b id="val-total">0</b></div><div class="sy-stat">Pending<b id="val-pending">0</b></div><div class="sy-stat">Preparing<b id="val-preparing">0</b></div><div class="sy-stat">Ready<b id="val-ready">0</b></div><div class="sy-stat">Completed<b id="val-completed">0</b></div><div class="sy-stat">Cancelled<b id="val-cancelled">0</b></div><div class="sy-stat">Refund requests<b id="val-refund">0</b></div></div>
         <div class="sy-filters sy-quick" id="quick-bar">
-            <button class="sy-btn small" id="q-today" type="button" data-quick="today">TODAY</button>
-            <button class="sy-btn small ghost" type="button" data-quick="all">ALL DATES - ALL</button>
-            <button class="sy-btn small ghost" type="button" data-quick="Completed">ALL DATES - COMPLETED</button>
-            <button class="sy-btn small ghost" type="button" data-quick="Pending">ALL DATES - PENDING</button>
-            <button class="sy-btn small ghost" type="button" data-quick="Cancelled">ALL DATES - CANCELLED</button>
-            <button class="sy-btn small ghost" type="button" id="btn-export" style="margin-left:auto;">EXPORT CSV</button>
+            <button class="sy-btn small" id="q-today" type="button" data-quick="today">Today</button>
+            <button class="sy-btn small ghost" type="button" data-quick="all">All dates</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Pending">Pending</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Preparing">Preparing</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Ready">Ready</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Out for Delivery">Out for delivery</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Completed">Completed</button>
+            <button class="sy-btn small ghost" type="button" data-quick="Cancelled">Cancelled</button>
+            <button class="sy-btn small ghost" type="button" data-quick="refunds">Refund requests</button>
         </div>
-        <p class="sy-sub" id="range-note"></p>
-
+        <p class="sy-sub" id="range-note" style="margin-bottom:10px"></p>
         <div class="sy-filters">
             <input type="text" id="f-search" class="sy-input" placeholder="Order number or customer...">
-
-            <label style="font-size:12px; font-weight:bold; align-self:center;">From:</label>
-            <input type="date" id="f-start-date" class="sy-input" style="width:auto;">
-
-            <label style="font-size:12px; font-weight:bold; align-self:center;">To:</label>
-            <input type="date" id="f-end-date" class="sy-input" style="width:auto;">
-
-            <select id="f-status" class="sy-input">
-                <option value="">All status</option>
-                <option>Pending</option>
-                <option>Completed</option>
-                <option>Cancelled</option>
-            </select>
-            <button class="sy-btn" id="btn-filter" type="button">FILTER</button>
-            <button class="sy-btn ghost" id="btn-reset" type="button">RESET</button>
+            <label for="f-start-date">From</label><input type="date" id="f-start-date" class="sy-input">
+            <label for="f-end-date">To</label><input type="date" id="f-end-date" class="sy-input">
+            <select id="f-status" class="sy-input"><option value="">All status</option><option>Pending</option><option>Preparing</option><option>Ready</option><option>Out for Delivery</option><option>Completed</option><option>Cancelled</option></select>
+            <button class="sy-btn" id="btn-filter" type="button">Filter</button><button class="sy-btn ghost" id="btn-reset" type="button">Reset</button>
         </div>
-        <div class="sy-scroll"><table class="sy-table"><thead><tr><th>ORDER</th><th>DATE</th><th>CUSTOMER</th><th>ITEMS</th><th>TOTAL</th><th>PAYMENT</th><th>PICK-UP</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody id="transaction-table-body"></tbody></table></div>
+        <div class="sy-scroll"><table class="sy-table"><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Pick-up / Delivery</th><th>Progress</th><th>Action</th></tr></thead><tbody id="transaction-table-body"></tbody></table></div>
     </main>
-    <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-    <script src="../JavaScripts/api.js"></script>
-    <script src="../JavaScripts/admin_history.js"></script>
+    <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/scan.js"></script>
+    <script src="../JavaScripts/qr_pay.js"></script><script src="../JavaScripts/admin_history.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

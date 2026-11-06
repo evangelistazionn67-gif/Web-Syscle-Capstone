@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - Practice payment</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="shop">
+<main class="sy-page" style="max-width:560px">
+  <div class="sy-card sy-sandbox">
+    <span class="sy-chip warn">Test mode</span>
+    <h1>Practice payment</h1>
+    <p class="sy-sub">The real payment provider (PayMongo or PayPal) is not connected on this server, so this page stands in for it. No money moves. Use it to try the whole order flow.</p>
+    <div id="sb-order" class="sy-sbrow">Loading your order...</div>
+    <div class="sy-modal-actions" style="justify-content:space-between"><a class="sy-btn ghost" href="orders.html">Pay later</a><button class="sy-btn accent" id="sb-pay" type="button" disabled>Pay now (practice)</button></div>
+  </div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script>
+<script>
+(async function () {
+  const me = await window.SY_READY; if (!me) { location.href = loginUrl(); return; }
+  const id = +new URLSearchParams(location.search).get('order'), box = document.getElementById('sb-order'), btn = document.getElementById('sb-pay');
+  let o = null; try { o = (await api('/api/orders')).find(x => x.id === id); } catch (e) { }
+  if (!o) { box.textContent = 'We could not find that order.'; return; }
+  box.innerHTML = '<span>Order <b>' + esc(o.code) + '</b></span><b>' + peso(o.total) + '</b>';
+  if (o.paymentStatus === 'Paid') { box.insertAdjacentHTML('afterend', '<div class="sy-banner ready">' + ico('check-circle') + ' This order is already paid.</div>'); return; }
+  btn.disabled = false;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try { await api('/api/orders/' + id + '/sandbox-pay', 'POST'); location.href = 'orders.html?paid=' + id; }
+    catch (e) { toast(e.message, true); btn.disabled = false; }
+  });
+  initHeader(null);
+})();
+</script>
+</body></html>

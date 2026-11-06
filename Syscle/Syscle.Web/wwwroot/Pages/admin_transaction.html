@@ -2,22 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syscle - Walk-in Transaction</title><link rel="stylesheet" href="../Styles/global.css"><link rel="stylesheet" href="../Styles/admin_transaction_styles.css"><link rel="stylesheet" href="../Styles/shop_additions.css">
+  <title>Syscle - Walk-in Transaction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body>
-  <header class="top-nav">
-    <div class="logo-area"><h2>Web-Syscle</h2><p>Admin Panel</p></div>
-    <div class="search-container">
-      <input type="text" id="main-search-input" class="search-bar" placeholder="Search...">
-      <img src="../Icons_and_Buttons/icon_clear.jpg" alt="Clear" id="clear-search" class="search-action-icon">
-      <img src="../Icons_and_Buttons/icon_search.jpg" alt="Search" id="execute-search" class="search-action-icon">
-    </div>
-    <div class="nav-actions"><a href="settings.html"><img src="../Icons_and_Buttons/icon_settings.jpg" alt="Settings" class="nav-icon settings-icon"></a><a href="account.html"><img src="../Icons_and_Buttons/Icon_Account.jpg" alt="Account" class="nav-icon profile-icon"></a></div>
-  </header>
+<body data-area="admin" class="has-cobar">
+  
 <main class="sy-page">
-    <button class="back-btn" onclick="location.href='adminhomepage.html'">&larr; Dashboard</button><h1>Walk-in Transaction</h1>
+    <h1>Walk-in sale</h1><p class="sy-sub">Scan the QR label on each item, check the items, then confirm the money. The sale is recorded only after both checks.</p>
     <div class="sy-pos">
-      <div class="sy-card"><h3>Items</h3>
+      <div class="sy-card"><div class="sy-toolbar" style="margin:0 0 10px"><h3>Items</h3><button class="sy-btn small" id="btn-scan-item" type="button"><i class="bi bi-qr-code-scan" aria-hidden="true"></i> Scan item</button></div>
         <div class="pos-search-wrapper"><input type="text" id="pos-item-search" class="sy-input" placeholder="Search an item to add..." autocomplete="off">
           <div class="pos-dropdown-list" id="pos-search-results"></div></div>
         <div id="transaction-items-container" class="sy-items"></div></div>
@@ -27,11 +20,12 @@
         <p class="cost-breakdown-title">Cost Breakdown</p><div id="cost-breakdown-container" class="sy-breakdown"></div>
         <div class="total-cost-row"><strong id="pos-total">Total Due: 0</strong></div>
         <p class="order-number-text" id="order-number-text">TRANS-ID: (Generated after saving)</p>
-        <button class="sy-btn" id="btn-generate" type="button">GENERATE TRANSACTION</button></div>
+        <button type="button" class="sy-btn small ghost" id="btn-reprint" hidden><i class="bi bi-printer" aria-hidden="true"></i> Print receipt</button>
+        <button class="sy-btn" id="btn-generate" type="button">Review and record sale</button></div>
     </div>
   </main>
-  <div class="support-btn"><img src="../Icons_and_Buttons/icon_support.jpg" alt="Support" class="support-icon"></div>
-  <script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_transaction.js"></script>
+  <div class="sy-cobar" role="region" aria-label="Record sale"><div class="sy-cobar-in"><div class="sy-cobar-total"><small>Total due</small><b id="pos-bar-total">0</b></div><button class="proceed-checkout-btn" id="pos-bar-btn" type="button">Review and record sale <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div></div>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/scan.js"></script><script src="../JavaScripts/qr_pay.js"></script><script src="../JavaScripts/admin_transaction.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

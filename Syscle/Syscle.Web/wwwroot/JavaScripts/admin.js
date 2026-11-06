@@ -26,7 +26,7 @@
       card.className = 'category-card default-category';
       if (cat.image) card.style.backgroundImage = 'url(' + JSON.stringify(cat.image) + ')';
       const h = document.createElement('h3'); h.textContent = cat.name;
-      const del = document.createElement('div'); del.className = 'delete-category-btn'; del.innerHTML = '&times;'; del.title = 'Delete category';
+      const del = document.createElement('div'); del.className = 'delete-category-btn'; del.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>'; del.title = 'Delete category';
       del.addEventListener('click', async e => {
         e.stopPropagation();
         if (!confirm(`Delete the "${cat.name}" category and every item inside it? Past orders are kept.`)) return;

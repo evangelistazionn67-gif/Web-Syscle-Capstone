@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - Stock Movement</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin" data-search="Search item or order number...">
+<main class="sy-page">
+  <div class="sy-toolbar"><div><h1>Stock movement</h1><p class="sy-sub" style="margin:0">Every unit that came in or went out: sales, cancellations, restocks and edits.</p></div>
+    <div class="sy-pactions"><a class="sy-btn ghost small" href="admin_inventory.html"><i class="bi bi-arrow-left" aria-hidden="true"></i> Inventory</a><button class="sy-btn ghost small" id="sm-csv" type="button">Export CSV</button></div></div>
+  <div class="sy-cards"><div class="sy-stat">Movements<b id="sm-n">0</b></div><div class="sy-stat">Units in<b id="sm-in" class="sy-ok">0</b></div><div class="sy-stat">Units out<b id="sm-out" class="sy-red">0</b></div><div class="sy-stat">Net change<b id="sm-net">0</b></div></div>
+  <div class="sy-filters">
+    <select id="sm-reason" class="sy-input" aria-label="Reason"><option value="">All reasons</option><option>Online order</option><option>Walk-in sale</option><option>Order cancelled</option><option>Restock (+)</option><option>Removed (-)</option><option>Edited by admin</option><option>New item</option><option>Item deleted</option></select>
+    <label for="sm-from">From</label><input type="date" id="sm-from" class="sy-input"><label for="sm-to">To</label><input type="date" id="sm-to" class="sy-input">
+    <button class="sy-btn" id="sm-go" type="button">Filter</button><button class="sy-btn ghost" id="sm-reset" type="button">Reset</button></div>
+  <div class="sy-scroll"><table class="sy-table"><thead><tr><th>Date</th><th>Item</th><th>Reason</th><th>Order</th><th class="r">Change</th><th class="r">Stock after</th><th>By</th></tr></thead><tbody id="sm-body"><tr><td colspan="7" class="sy-empty">Loading...</td></tr></tbody></table></div>
+  <p class="sy-sub" style="margin-top:12px">Shows the latest 500 movements. History starts from the day this feature was added.</p>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_stock.js"></script><script src="../JavaScripts/support.js"></script>
+</body></html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Syscle - Product Insights</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css"></head>
+<body data-area="admin">
+<main class="sy-page">
+  <div class="sy-toolbar"><div><h1>Product insights</h1><p class="sy-sub" style="margin:0">Which products sell fast, which are slow-moving, and what sales to expect next.</p></div></div>
+  <div class="sy-filters no-print"><label for="in-days">Look at the last</label>
+    <select id="in-days" class="sy-input"><option value="14">14 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select>
+    <div class="sy-seg" id="in-seg"><button data-s="" class="on">All</button><button data-s="Fast">Fast-moving</button><button data-s="Slow">Slow-moving</button></div></div>
+  <div class="sy-cards" id="in-cards"></div>
+  <div class="sy-card"><h3>Fast and slow-moving products</h3><p class="sy-sub" style="margin:0 0 8px">Fast = among the top sellers. Slow = in stock but sold 1 or fewer in this period. Use <b>Feature</b> to show a slow item on the shop homepage, or <b>Make a bundle</b> to pair it with a seller.</p>
+    <div class="sy-scroll"><table class="sy-table" style="box-shadow:none;border:0;min-width:640px"><thead><tr><th>Item</th><th>Status</th><th class="r">Sold</th><th class="r">Stock</th><th class="r">Days of stock left</th><th>Last sold</th><th>Promote</th></tr></thead><tbody id="in-body"><tr><td colspan="7" class="sy-empty">Loading...</td></tr></tbody></table></div></div>
+  <div class="sy-card"><h3>Sales forecast</h3><p class="sy-sub" id="fc-note" style="margin:0 0 8px"></p><div id="fc-cards" class="sy-cards"></div><div id="fc-chart"></div></div>
+  <div class="sy-card"><h3>Restock suggestions</h3><p class="sy-sub" style="margin:0 0 8px">Based on how fast each item sold in the last 30 days, with a 20% safety buffer.</p>
+    <div class="sy-scroll"><table class="sy-table" style="box-shadow:none;border:0;min-width:520px"><thead><tr><th>Item</th><th class="r">Sells per day</th><th class="r">In stock</th><th class="r">Days left</th><th class="r">Suggested order (30 days)</th></tr></thead><tbody id="fc-restock"></tbody></table></div></div>
+</main>
+<script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/admin_insights.js"></script><script src="../JavaScripts/support.js"></script>
+</body></html>
