@@ -72,10 +72,11 @@ static class QrPay
     // Marks the order Paid (once). A walk-in sale is finished at the same moment; an online pick-up/delivery order carries on as normal (the admin still prepares it).
     public static async Task<bool> MarkPaidAsync(MySqlConnection c, int id)
     {
-        var n = await c.ExecuteAsync(@"UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW(), PaymentConfirmedBy='PayMongo QR Ph',
+        // Sql.MarkPaid is the shared rule: money that arrives for an already-cancelled order flags the order "Refund requested" instead of being lost
+        var n = await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + @", PaymentConfirmedBy='PayMongo QR Ph',
             PaymentMethod=IFNULL((SELECT Label FROM PaymentMethods WHERE MethodCode='qrph'), PaymentMethod),
-            Status=IF(Channel='Walk-in','Completed',Status), CompletedAt=IF(Channel='Walk-in',NOW(),CompletedAt)
-            WHERE OrderId=@id AND PaymentStatus<>'Paid' AND Status<>'Cancelled'", new { id });
+            CompletedAt=IF(Channel='Walk-in' AND Status<>'Cancelled',NOW(),CompletedAt), Status=IF(Channel='Walk-in' AND Status<>'Cancelled','Completed',Status)
+            WHERE OrderId=@id AND PaymentStatus<>'Paid'", new { id });
         return n > 0;
     }
     public static async Task<bool> MarkPaidByIntentAsync(MySqlConnection c, string intentId)

@@ -141,6 +141,8 @@ static class Features
                 CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS Code FROM Orders o LEFT JOIN Users u ON u.UserId=o.UserId WHERE o.OrderId=@id FOR UPDATE", new { id }, tx);
             if (o is null) return Results.NotFound(new { error = "Not found." });
             if (o.RefundStatus != "Requested") return Conflict("There is no open refund request for this order.");
+            if (r.Approve && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE OrderId=@id AND LalamoveStatus IN ('BOOKING','ASSIGNING_DRIVER','ON_GOING','PICKED_UP','MANUAL')", new { id }, tx) > 0)
+                return Conflict("A Lalamove rider is booked for this order. Cancel the booking first (Delivery button on the order), then approve the refund.");
             var note = Nz(r.Note); if (note != null && note.Length > 300) note = note[..300];
             if (!r.Approve)
             {

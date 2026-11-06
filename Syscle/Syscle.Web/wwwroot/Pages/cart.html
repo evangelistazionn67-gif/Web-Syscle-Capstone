@@ -5,7 +5,7 @@
   <title>Syscle - Shopping Cart</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body data-area="shop" class="cart-page">
+<body data-area="shop">
   
 <main class="cart-page-wrapper">
     <div class="cart-header"><div><a href="homepage.html" class="back-btn"><i class="bi bi-arrow-left" aria-hidden="true"></i> Keep shopping</a>
@@ -14,7 +14,7 @@
       <div class="cart-items-window" id="cart-items-container"></div>
       <div class="cart-right-column">
         <div class="order-summary-box">
-          <div class="sy-sumscroll">
+          <div class="sy-sumbody">
           <h2>Order summary</h2><hr class="summary-divider">
           <div class="summary-meta-grid">
             <span><b id="summary-dynamic-name">(Username)</b><span class="right-align sy-muted" id="purchase-date">(Date)</span></span>
@@ -26,7 +26,7 @@
               <label>Pin your delivery place</label>
               <div id="del-map" class="sy-map" aria-label="Delivery map"></div>
               <div class="sy-maprow"><button type="button" class="sy-btn ghost small" id="del-locate"><i class="bi bi-crosshair" aria-hidden="true"></i> Use my current location</button><span id="del-km" class="sy-sub">Tap the map to drop a pin on your place.</span></div>
-              <p class="sy-sub" style="margin:0 0 8px">Pay with GCash or PayMongo, or choose Cash and pay when it arrives (cash on delivery has a maximum order amount).</p>
+              <p class="sy-sub" style="margin:0 0 8px">Pay online with PayMongo, or choose Cash and pay when it arrives (cash on delivery has a maximum order amount).</p>
               <label for="del-address">Delivery address (add your house number and a landmark)</label><textarea id="del-address" class="promo-input" rows="2" maxlength="250" placeholder="House no., street, barangay, city"></textarea>
               <label for="del-phone">Phone number for the rider</label><input type="tel" id="del-phone" class="promo-input" maxlength="20" placeholder="09XX XXX XXXX" inputmode="tel"></div>
             <div><label for="pickup-date" id="date-label">Pick-up date</label><input type="date" class="promo-input" id="pickup-date"></div>
@@ -34,21 +34,18 @@
           <p class="cost-breakdown-title">Cost breakdown</p>
           <div class="cost-breakdown-window" id="cost-breakdown-container"></div>
           </div>
-          <div class="sy-sumfoot">
+          <div class="sy-paypanel">
             <div class="total-cost-row"><strong id="total-cost">Total: 0</strong></div>
-            <div class="sy-payblock">
-              <label id="pay-label" for="payment-method">Payment method</label>
-              <select id="payment-method" hidden></select><input type="hidden" id="gc-ref">
-              <div class="sy-paylist" id="pay-list"></div>
-            </div>
+            <div class="sy-payblock"><label id="pay-label">Payment method</label><div id="pay-list" class="sy-paylist" role="radiogroup" aria-labelledby="pay-label"></div><select class="promo-input" id="payment-method" hidden aria-hidden="true"></select></div>
             <p class="order-number-text" id="order-number">Your order number appears after checkout.</p>
             <button class="proceed-checkout-btn" id="btn-checkout" type="button">Place order <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
-            <p class="sy-sumnote">You will get an email confirmation and can track every step in <a href="orders.html">My orders</a>.</p>
+            <p class="sy-sub" style="margin:0;text-align:center;font-size:13px">You will get an email confirmation and can track every step in <a href="orders.html">My orders</a>.</p>
           </div>
         </div>
       </div>
     </div>
   </main>
+  <div class="sy-cobar" id="cart-bar" role="region" aria-label="Place order" hidden><div class="sy-cobar-in"><div class="sy-cobar-total"><small>Total</small><b id="bar-total">0</b></div><button class="proceed-checkout-btn" id="bar-btn" type="button">Place order <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div></div>
   <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/cart.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>

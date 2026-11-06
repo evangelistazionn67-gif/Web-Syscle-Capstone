@@ -228,6 +228,15 @@ CREATE TABLE IF NOT EXISTS Orders (
   DeliveryAddress    VARCHAR(250)  NULL,
   DeliveryPhone      VARCHAR(20)   NULL,
   DeliveryFee        DECIMAL(10,2) NOT NULL DEFAULT 0,
+  DeliveryLat        DECIMAL(9,6)  NULL,           -- where the customer pinned the delivery place
+  DeliveryLng        DECIMAL(9,6)  NULL,
+  DeliveryKm         DECIMAL(6,1)  NULL,           -- road distance from the store, used for the range limit and the fee
+  LalamoveOrderId    VARCHAR(40)   NULL,
+  LalamoveStatus     VARCHAR(20)   NULL,           -- BOOKING | ASSIGNING_DRIVER | ON_GOING | PICKED_UP | COMPLETED | CANCELED | REJECTED | EXPIRED | MANUAL
+  LalamoveLink       VARCHAR(400)  NULL,
+  LalamoveDriver     VARCHAR(120)  NULL,
+  LalamoveCost       DECIMAL(10,2) NULL,           -- what the store paid Lalamove
+  LalamoveCheckedAt  DATETIME      NULL,
   Courier            VARCHAR(60)   NULL,
   TrackingNo         VARCHAR(60)   NULL,
   ReadyAt            DATETIME      NULL,

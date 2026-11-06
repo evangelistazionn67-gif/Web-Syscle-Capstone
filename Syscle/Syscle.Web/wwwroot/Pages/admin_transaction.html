@@ -5,7 +5,7 @@
   <title>Syscle - Walk-in Transaction</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
-<body data-area="admin">
+<body data-area="admin" class="has-cobar">
   
 <main class="sy-page">
     <h1>Walk-in sale</h1><p class="sy-sub">Scan the QR label on each item, check the items, then confirm the money. The sale is recorded only after both checks.</p>
@@ -20,10 +20,12 @@
         <p class="cost-breakdown-title">Cost Breakdown</p><div id="cost-breakdown-container" class="sy-breakdown"></div>
         <div class="total-cost-row"><strong id="pos-total">Total Due: 0</strong></div>
         <p class="order-number-text" id="order-number-text">TRANS-ID: (Generated after saving)</p>
+        <button type="button" class="sy-btn small ghost" id="btn-reprint" hidden><i class="bi bi-printer" aria-hidden="true"></i> Print receipt</button>
         <button class="sy-btn" id="btn-generate" type="button">Review and record sale</button></div>
     </div>
   </main>
-  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/scan.js"></script><script src="../JavaScripts/admin_transaction.js"></script>
+  <div class="sy-cobar" role="region" aria-label="Record sale"><div class="sy-cobar-in"><div class="sy-cobar-total"><small>Total due</small><b id="pos-bar-total">0</b></div><button class="proceed-checkout-btn" id="pos-bar-btn" type="button">Review and record sale <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div></div>
+  <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script><script src="../JavaScripts/scan.js"></script><script src="../JavaScripts/qr_pay.js"></script><script src="../JavaScripts/admin_transaction.js"></script>
     <script src="../JavaScripts/support.js"></script>
 </body>
 </html>

@@ -10,17 +10,16 @@
 ## How the money flows
 | Customer pays | Order created | Admin does | Counted as sale |
 |---|---|---|---|
-| PayMongo | Paid automatically after checkout | Confirm items, Book Lalamove | when Paid + items confirmed |
-| GCash | Unpaid until admin checks the reference | Confirm items, "Payment received", Book Lalamove | after payment recorded |
+| PayMongo (QR Ph, GCash, Maya, card) | Paid automatically after checkout | Confirm items, Book Lalamove | when Paid + items confirmed |
 | Cash on delivery | Unpaid | Confirm items, Book Lalamove, collect cash, press "Cash collected", Complete | after "Cash collected" |
 
 * The customer pays a delivery fee (base + per km, rounded up to PHP 5). The Lalamove rider cost is paid from your Lalamove wallet; the order screen shows both so you can see the difference.
-* Cash on delivery: Lalamove does not hand the shop the customer's cash. You (or whoever delivers) must collect it; keep the COD limit low.
+* Cash on delivery: Lalamove does not hand the shop the customer's cash. You (or whoever delivers) must collect it; keep the COD limit low (Settings).
 * A booked rider blocks cancelling the order and approving a refund until the booking is cancelled.
-* Gateway refunds (PayMongo/GCash) are returned by you in the provider dashboard.
+* PayMongo refunds are returned by you in the PayMongo dashboard.
 
 ## Receipts
-Orders > Receipt button prints in one click (80 mm roll or A4). Walk-in sales print by themselves after "Record sale" (switch off in Settings). Customers can print their own receipts in My orders.
+Admin > Transactions > Receipt button prints in one click (80 mm roll or A4). Walk-in sales print by themselves after "Record sale" (switch off in Settings). Customers can print their own receipts in My orders.
 
 ## Pay by QR in the shop (PayMongo QR Ph)
 * Walk-in sale: choose **QR Ph (scan to pay)** > "Show payment QR". The customer scans it with GCash, Maya or any bank app. The sale closes and the receipt prints by itself once PayMongo confirms. No reference number is typed.

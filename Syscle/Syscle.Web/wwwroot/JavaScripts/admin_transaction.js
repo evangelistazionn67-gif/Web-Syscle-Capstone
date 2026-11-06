@@ -28,6 +28,7 @@
             if (bd) bd.insertAdjacentHTML('beforeend', `<div class="sy-row"><span>${esc(p.name)}${l.size ? ' [' + esc(l.size) + ']' : ''} (${peso(p.price)})</span><span>x ${l.qty}</span></div>`);
         });
         if ($('pos-total')) $('pos-total').textContent = 'Total Due: ' + peso(total);
+        if ($('pos-bar-total')) $('pos-bar-total').textContent = peso(total);
     }
     const search = $('pos-item-search');
     if (search) {
@@ -69,24 +70,44 @@
     }
     if ($('btn-scan-item')) $('btn-scan-item').addEventListener('click', () => SyScan.open({ title: 'Scan items', hint: 'Scan the QR label on each item. Use a USB scanner, the camera, or type the SKU.', keepOpen: true, onCode: addByCode }));
 
+    // receipt: prints by itself right after a sale (one click: "Record sale"), through a hidden page so no new window is needed
+    let lastSale = 0, autoPrint = true, qrReady = false;
+    function printReceipt(id) {
+        const old = document.getElementById('rc-frame'); if (old) old.remove();
+        const f = document.createElement('iframe'); f.id = 'rc-frame'; f.title = 'Receipt'; f.setAttribute('aria-hidden', 'true');
+        f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+        f.src = '/Pages/receipt.html?order=' + id + '&a=1&embed=1&print=1'; document.body.appendChild(f);
+    }
+    if ($('btn-reprint')) $('btn-reprint').addEventListener('click', () => { if (lastSale) printReceipt(lastSale); });
+    try { autoPrint = (await api('/api/admin/store-info')).info.AutoPrintReceipt !== '0'; } catch (e) { }
+
     // two checks before the sale is saved: the items first, then the money
+    if ($('pos-bar-btn')) $('pos-bar-btn').addEventListener('click', () => $('btn-generate').click());
     if ($('btn-generate')) $('btn-generate').addEventListener('click', () => {
         if (!lines.length) return toast('Add at least one item.', true);
         const method = $('pos-payment').selectedOptions[0] ? $('pos-payment').selectedOptions[0].textContent : '';
         const total = lines.reduce((a, l) => a + products.find(x => x.id === l.id).price * l.qty, 0);
+        const isQr = $('pos-payment').value === 'qrph';
         const m = showModal(`<h2>Confirm this sale</h2><p class="sy-sub">Step 1: check the items. Step 2: confirm the money. The sale is saved only after both.</p>
           <ul class="sy-checklist">${lines.map(l => { const p = products.find(x => x.id === l.id); return `<li><label><input type="checkbox" class="ck-item"> ${esc(p.name)}${l.size ? ' (' + esc(l.size) + ')' : ''} x ${l.qty} <b>${peso(p.price * l.qty)}</b></label></li>`; }).join('')}</ul>
           <div class="sy-bigamt">${peso(total)}</div>
-          <label class="sy-check-line"><input type="checkbox" id="ck-pay" disabled> I received ${peso(total)} by ${esc(method)}</label>
-          <div class="sy-modal-actions"><button class="sy-btn ghost" type="button" id="ws-no">Back</button><button class="sy-btn accent" type="button" id="ws-go" disabled>Record sale</button></div>`);
+          ${isQr ? `<p class="sy-sub">Next, a QR code appears. The customer scans it and pays by GCash, Maya or bank app.</p><input type="checkbox" id="ck-pay" checked hidden>` : `<label class="sy-check-line"><input type="checkbox" id="ck-pay" disabled> I received ${peso(total)} by ${esc(method)}</label>`}
+          <div class="sy-modal-actions"><button class="sy-btn ghost" type="button" id="ws-no">Back</button><button class="sy-btn accent" type="button" id="ws-go" disabled>${isQr ? 'Show payment QR' : 'Record sale'}</button></div>`);
         const items = [...m.el.querySelectorAll('.ck-item')], pay = m.el.querySelector('#ck-pay'), go = m.el.querySelector('#ws-go');
-        const sync = () => { const ok = items.every(x => x.checked); pay.disabled = !ok; if (!ok) pay.checked = false; go.disabled = !(ok && pay.checked); };
+        const sync = () => { const ok = items.every(x => x.checked); pay.disabled = !ok && !isQr; if (!isQr && !ok) pay.checked = false; else if (isQr) pay.checked = true; go.disabled = !(ok && pay.checked); };
         items.forEach(x => x.addEventListener('change', sync)); pay.addEventListener('change', sync); m.el.querySelector('#ws-no').onclick = m.close;
         go.onclick = async () => {
             go.disabled = true;
             try {
                 const res = await api('/api/admin/transactions/walkin', 'POST', { customerName: $('walkin-name').value, paymentMethod: $('pos-payment').value, items: lines.map(l => ({ productId: l.id, qty: l.qty, size: l.size })) });
-                m.close(); $('order-number-text').textContent = 'TRANS-ID: ' + res.orderCode; toast(`Sale ${res.orderCode} recorded: ${peso(res.total)}`);
+                m.close(); $('order-number-text').textContent = 'TRANS-ID: ' + res.orderCode;
+                if (res.qr) {
+                    lines = []; $('walkin-name').value = ''; await loadProducts(); render();
+                    SyQr.show(res.orderId, async ok => { await loadProducts(); render(); if (ok) { lastSale = res.orderId; if ($('btn-reprint')) $('btn-reprint').hidden = false; toast(`Sale ${res.orderCode} paid by QR: ${peso(res.total)}`); if (autoPrint) printReceipt(res.orderId); } else toast('Sale ' + res.orderCode + ' was cancelled.', true); }, true);
+                    return;
+                }
+                toast(`Sale ${res.orderCode} recorded: ${peso(res.total)}`);
+                lastSale = res.orderId; if ($('btn-reprint')) $('btn-reprint').hidden = false; if (autoPrint) printReceipt(res.orderId);
                 lines = []; $('walkin-name').value = ''; await loadProducts(); render();
             } catch (e) { toast(e.message, true); go.disabled = false; await loadProducts(); }
         };
@@ -95,6 +116,8 @@
     try {
         const methods = (await api('/api/admin/payment-methods')).filter(m => m.isOn && m.code !== 'paymongo' && m.code !== 'paypal');   // online methods need the customer's own device, so only counter methods are offered here
         if ($('pos-payment')) $('pos-payment').innerHTML = methods.map(m => `<option value="${esc(m.code)}">${esc(m.label)}</option>`).join('') || '<option value="">No payment method enabled</option>';
+        try { qrReady = (await api('/api/admin/qr/status')).ready; } catch (e) { }
+        if (!qrReady && $('pos-payment')) [...$('pos-payment').options].forEach(o => { if (o.value === 'qrph') o.remove(); });
         await loadProducts(); render();
     } catch (e) { toast(e.message, true); }
 })();

@@ -164,7 +164,7 @@
     const touch = () => {
       if (done) return; const now = Date.now(); last = now;
       if (warnOn) { warnOn = false; box.hidden = true; }
-      if (now - pinged > pingGap) { pinged = now; fetch('/api/auth/activity', { method: 'POST', headers: { 'X-Requested-With': 'syscle', 'X-Area': 'admin' } }).catch(() => { }); }
+      if (now - pinged > pingGap) { pinged = now; fetch('/api/auth/activity', { method: 'POST', keepalive: true, headers: { 'X-Requested-With': 'syscle', 'X-Area': 'admin' } }).catch(() => { }); }
     };
     ['pointerdown', 'keydown', 'scroll', 'touchstart', 'wheel'].forEach(ev => window.addEventListener(ev, touch, { passive: true, capture: true }));
     const leave = async () => {

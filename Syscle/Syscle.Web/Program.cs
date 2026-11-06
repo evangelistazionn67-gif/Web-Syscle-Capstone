@@ -430,10 +430,10 @@ shop.MapGet("/cart/bundles", async (ClaimsPrincipal u, Db db) => { using var c =
 shop.MapPost("/promo", async (PromoReq r, ClaimsPrincipal u, Db db) => { using var c = db.Open(); var (pct, perr) = await Promos.Check(c, (r.Code ?? "").Trim(), null, Uid(u)); return pct is null ? Results.NotFound(new { error = perr ?? "Invalid code." }) : Results.Ok(new { percent = pct }); });
 shop.MapGet("/payment-methods", async (Db db, PayMongoService pm) =>
 {
-    // every payment method the store switched on is shown. An online one whose keys are not set yet is marked (test mode lets it be tried with a fake payment page).
-    using var c = db.Open(); var test = cfg.GetValue("Payments:TestMode", false);
-    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label, AccountNumber, AccountName FROM PaymentMethods WHERE IsOn=1 AND MethodCode<>'qrph'");
-    return Results.Ok(rows.Select(m => { var ready = m.Code == "paymongo" ? pm.IsReady : m.Code == "paypal" ? pp.IsReady : true; return new { code = m.Code, label = m.Label, accountNumber = m.AccountNumber, accountName = m.AccountName, ready, test = !ready && test, online = m.Code is "paymongo" or "paypal" }; }));
+    // The two ways to pay: cash at the store, or online through PayMongo (GCash, Maya, QR Ph, cards and other networks). An online method whose PayMongo key is not set yet is shown but cannot be picked.
+    using var c = db.Open();
+    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label FROM PaymentMethods WHERE IsOn=1 AND MethodCode IN ('cash','paymongo') ORDER BY FIELD(MethodCode,'cash','paymongo')");
+    return Results.Ok(rows.Select(m => new { code = m.Code, label = m.Label, ready = m.Code != "paymongo" || pm.IsReady, online = m.Code == "paymongo" }));
 });
 
 shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailService emailer, PayMongoService pm, PayPalService pp, HttpRequest req, IConfiguration cfg) =>
@@ -441,10 +441,10 @@ shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailS
     using var c = db.Open(); using var tx = c.BeginTransaction(); var uid = Uid(u);
     var lines = (await c.QueryAsync<Line>("SELECT p.ProductId, p.Name, p.Price, ci.Qty, ci.Size, ci.Color FROM CartItems ci JOIN Products p ON p.ProductId=ci.ProductId WHERE ci.UserId=@uid FOR UPDATE OF ci", new { uid }, tx)).ToList();   // FOR UPDATE: a second checkout from the same customer (double click, two tabs) waits here, then finds the cart already empty
     if (lines.Count == 0) return Bad("Cart empty.");
-    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1", new { m = r.PaymentMethod }, tx);
-    if (method is null || r.PaymentMethod == "qrph") return Bad("Invalid payment.");
-    var online = r.PaymentMethod is "paymongo" or "paypal"; var providerReady = r.PaymentMethod == "paypal" ? pp.IsReady : pm.IsReady; var testPay = online && !providerReady && cfg.GetValue("Payments:TestMode", false);
-    if (online && !providerReady && !testPay) return Bad("This online payment is not set up yet. Please choose another method.");
+    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1 AND MethodCode IN ('cash','paymongo')", new { m = r.PaymentMethod }, tx);
+    if (method is null) return Bad("Invalid payment.");
+    var online = r.PaymentMethod == "paymongo";
+    if (online && !pm.IsReady) return Bad("Online payment is not available right now. Please choose another method.");
     // Home delivery: the customer gives an address and a phone number the rider can call. The delivery fee is set by the store.
     var delivery = r.Fulfillment == "Delivery"; string? addr = null, dphone = null; decimal fee = 0; int codMax = 0; double dkm = 0; double? dlat = null, dlng = null;
     if (delivery)
@@ -466,9 +466,9 @@ shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailS
     if (!string.IsNullOrWhiteSpace(r.PromoCode)) { code = r.PromoCode.Trim(); var (found, promoErr) = await Promos.Check(c, code, tx, uid); if (found is null) return Bad(promoErr ?? "Invalid promo."); pct = found.Value; }
     var sub = lines.Sum(l => l.Price * l.Qty); var (bundleDiscount, _) = await Bundles.ForCart(c, uid, tx); var discount = Math.Round((sub - bundleDiscount) * pct / 100m, 2); var total = sub - bundleDiscount - discount + fee;
     // cash on delivery is allowed, but only up to the limit the store sets (0 = no limit), because the money is collected after the goods are handed over
-    if (delivery && r.PaymentMethod == "cash" && codMax > 0 && total > codMax) return Bad($"Cash on delivery is only for orders up to ₱{codMax:N0}. Please pay with GCash or PayMongo, or choose Store pick-up.");
+    if (delivery && r.PaymentMethod == "cash" && codMax > 0 && total > codMax) return Bad($"Cash on delivery is only for orders up to ₱{codMax:N0}. Please pay online, or choose Store pick-up.");
     var name = await c.ExecuteScalarAsync<string>("SELECT Username FROM Users WHERE UserId=@uid", new { uid }, tx);
-    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PaymentRef,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee,DeliveryLat,DeliveryLng,DeliveryKm) VALUES(@uid,@name,'Online',@method,@payRef,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee,@dlat,@dlng,@dkmv)", new { uid, name, method, payRef, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee, dlat, dlng, dkmv = delivery ? (double?)dkm : null }, tx);
+    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee,DeliveryLat,DeliveryLng,DeliveryKm) VALUES(@uid,@name,'Online',@method,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee,@dlat,@dlng,@dkmv)", new { uid, name, method, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee, dlat, dlng, dkmv = delivery ? (double?)dkm : null }, tx);
     var orderId = await c.ExecuteScalarAsync<int>("SELECT CAST(LAST_INSERT_ID() AS SIGNED)", null, tx);
     var soldOut = await Orders.TakeStock(c, tx, orderId, lines);
     if (soldOut != null) return Conflict($"Out of stock: {soldOut}");
@@ -523,21 +523,25 @@ app.MapPost("/api/webhooks/paymongo", async (HttpRequest req, Db db, PayMongoSer
 {
     using var reader = new StreamReader(req.Body); var payload = await reader.ReadToEndAsync();
     if (!pm.VerifySignature(payload, req.Headers["Paymongo-Signature"].ToString())) return Results.Unauthorized();
-    string? sid = null;
+    string? sid = null, intentId = null;
     try
     {
         using var doc = JsonDocument.Parse(payload); var attrs = doc.RootElement.GetProperty("data").GetProperty("attributes");
-        if (attrs.GetProperty("type").GetString() == "checkout_session.payment.paid")
-        {
-            var sid = attrs.GetProperty("data").GetProperty("id").GetString(); using var c = db.Open();
-            await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid });
-        }
-        else if (attrs.GetProperty("type").GetString() == "payment.paid")
-        {
-            // in-shop QR Ph payment: the payment names the payment intent that was saved on the order
-            var pid = attrs.GetProperty("data").GetProperty("attributes").GetProperty("payment_intent_id").GetString(); using var c = db.Open();
-            if (!string.IsNullOrEmpty(pid)) await QrPay.MarkPaidByIntentAsync(c, pid);
-        }
+        var evType = attrs.GetProperty("type").GetString();
+        if (evType == "checkout_session.payment.paid") sid = attrs.GetProperty("data").GetProperty("id").GetString();
+        // in-shop QR Ph payment: the payment names the payment intent that was saved on the order
+        else if (evType == "payment.paid" && attrs.GetProperty("data").GetProperty("attributes").TryGetProperty("payment_intent_id", out var pi)) intentId = pi.GetString();
+    }
+    catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not be read: " + ex.Message); return Results.Ok(new { ok = true }); }   // a payload we cannot read will not get better by retrying
+    if (sid != null)
+    {
+        try { using var c = db.Open(); await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + " WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid }); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not save the payment: " + ex.Message); return Results.StatusCode(500); }   // an error status makes PayMongo send the event again later
+    }
+    if (!string.IsNullOrEmpty(intentId))
+    {
+        try { using var c = db.Open(); await QrPay.MarkPaidByIntentAsync(c, intentId); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not save the QR payment: " + ex.Message); return Results.StatusCode(500); }
     }
     return Results.Ok(new { ok = true });
 });
@@ -772,7 +776,7 @@ admin.MapGet("/products", async (Db db) =>
     foreach (var p in prods) p.variants = allVariants.Where(v => v.productId == p.id).ToList();
     return Results.Ok(prods);
 });
-string? CheckProduct(ProductReq r) => string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100 ? "Invalid name." : string.IsNullOrWhiteSpace(r.ItemType) || r.ItemType.Trim().Length > 60 ? "Invalid item type." : r.Price < 0 ? "Invalid price." : r.Stock < 0 ? "Invalid stock." : (r.Description ?? "").Length > 2000 ? "The description is too long (2000 characters max)." : (r.Specs ?? "").Length > 2000 ? "The specifications are too long (2000 characters max)." : (r.FitTags ?? "").Length > 250 ? "Fit tags are too long." : (r.Sku ?? "").Trim().Length > 30 || !Regex.IsMatch((r.Sku ?? "").Trim(), @"^(SYS-\d{5})?$", RegexOptions.IgnoreCase) ? "SKU must be SYS- followed by exactly 5 numbers." : r.CostPrice is < 0 or > 10000000 ? "Invalid cost price." : null;
+string? CheckProduct(ProductReq r) => string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100 ? "Invalid name." : string.IsNullOrWhiteSpace(r.ItemType) || r.ItemType.Trim().Length > 60 ? "Invalid item type." : r.Price < 0 ? "Invalid price." : r.Stock < 0 ? "Invalid stock." : (r.Description ?? "").Length > 2000 ? "The description is too long (2000 characters max)." : (r.Specs ?? "").Length > 2000 ? "The specifications are too long (2000 characters max)." : (r.FitTags ?? "").Length > 250 ? "Fit tags are too long." : (r.Sku ?? "").Trim().Length > 30 || !Regex.IsMatch((r.Sku ?? "").Trim(), @"^[A-Za-z0-9_-]*$") ? "SKU may use letters, numbers, dashes and underscores (30 max)." : r.CostPrice is < 0 or > 10000000 ? "Invalid cost price." : null;
 async Task<bool> DuplicateProduct(MySqlConnection c, ProductReq r, int selfId) =>
     await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Products WHERE LOWER(Name)=LOWER(@n) AND CategoryId=@cat AND ProductId<>@selfId", new { n = r.Name!.Trim(), cat = r.CategoryId, selfId }) > 0
     || (Nz(r.Sku) != null && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Products WHERE Sku=@sku AND ProductId<>@selfId", new { sku = Nz(r.Sku)!.ToUpperInvariant(), selfId }) > 0)
@@ -1378,7 +1382,7 @@ static class Auth
             using var c = db.Open();
             s = await c.QueryFirstOrDefaultAsync<SessionRow>("SELECT Role, Status, SessionVersion, TIMESTAMPDIFF(SECOND, IFNULL(LastActive, NOW()), NOW()) AS IdleFor FROM Users WHERE UserId=@uid", new { uid });
             await c.ExecuteAsync("UPDATE Users SET LastSeen = NOW() WHERE UserId=@uid AND (LastSeen IS NULL OR LastSeen < DATE_SUB(NOW(), INTERVAL 1 MINUTE))", new { uid });
-            if (ctx.Scheme.Name == Schemes.Admin) idleLimit = await Cfg.IntAsync(c, "AdminIdleSeconds", 30, 3600);
+            if (ctx.Scheme.Name == Schemes.Admin) idleLimit = await Cfg.IntAsync(c, "AdminIdleSeconds", 30, 3600) + 20;   // +20 s grace: the page timer signs out first, the server only catches closed tabs. Without it a slow click on a link signed the admin out
         }
         string? why = null;
         if (s is null) why = "gone";
@@ -1429,8 +1433,8 @@ public class PayMongoService
             object Body(string[] methods) => new { data = new { attributes = new {
                 send_email_receipt = false, show_description = true, show_line_items = true, description = "Web-Syscle order " + orderCode, reference_number = orderCode,
                 line_items = new[] { new { currency = "PHP", amount = (int)Math.Round(total * 100m), name = "Order " + orderCode, quantity = 1 } },
-                payment_method_types = (_config["PayMongo:QrPh"] ?? "").ToLowerInvariant() == "true" ? new[] { "gcash", "paymaya", "card", "qrph" } : new[] { "gcash", "paymaya", "card" }, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
-            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", body); var text = await res.Content.ReadAsStringAsync();
+                payment_method_types = methods, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
+            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", Body(Methods)); var text = await res.Content.ReadAsStringAsync();
             if (!res.IsSuccessStatusCode)
             {
                 Console.WriteLine("[Syscle] PayMongo answered " + (int)res.StatusCode + " for the methods [" + string.Join(",", Methods) + "]: " + (text.Length > 300 ? text[..300] : text));
@@ -1783,6 +1787,8 @@ static class Seed
         await c.ExecuteAsync("UPDATE Orders SET PaymentMethod='QR, GCash, Maya or card (online)' WHERE PaymentMethod='GCash / Maya / Card (online)'");   // the order's label must keep matching the method's label
         await c.ExecuteAsync("UPDATE PaymentMethods SET Label='QR, GCash, Maya or card (online)' WHERE MethodCode='paymongo' AND Label='GCash / Maya / Card (online)'");
         // Promos and bundles
+        // in-shop QR Ph payment (shown on the sale screen only; never offered to online customers)
+        await c.ExecuteAsync("INSERT IGNORE INTO PaymentMethods (MethodCode, Label, IsOn) VALUES ('qrph','QR Ph (scan to pay)',1)");
         await AddColumn(c, "PromoCodes", "StartsAt", "DATE NULL"); await AddColumn(c, "PromoCodes", "EndsAt", "DATE NULL");
         await AddColumn(c, "PromoCodes", "MaxUses", "INT NULL"); await AddColumn(c, "PromoCodes", "Season", "VARCHAR(30) NULL");
         await AddColumn(c, "PromoCodes", "IsPublic", "TINYINT(1) NOT NULL DEFAULT 0");
@@ -1790,12 +1796,6 @@ static class Seed
         await AddColumn(c, "Bundles", "StartsAt", "DATE NULL"); await AddColumn(c, "Bundles", "EndsAt", "DATE NULL");
         await AddColumn(c, "Bundles", "Season", "VARCHAR(30) NULL"); await AddColumn(c, "Bundles", "Kind", "VARCHAR(10) NOT NULL DEFAULT 'Bundle'");
         await AddColumn(c, "Bundles", "Description", "VARCHAR(500) NULL"); await AddColumn(c, "Bundles", "ImagePath", "VARCHAR(260) NULL");
-        // in-shop QR Ph payment (shown on the sale screen only; never offered to online customers)
-        await c.ExecuteAsync("INSERT IGNORE INTO PaymentMethods (MethodCode, Label, IsOn) VALUES ('qrph','QR Ph (scan to pay)',1)");
-        // payment buttons are Cash, GCash and PayMongo. The old combined label becomes "PayMongo" (orders follow), and PayPal is switched off once
-        await c.ExecuteAsync("UPDATE Orders SET PaymentMethod='PayMongo' WHERE PaymentMethod='GCash / Maya / Card (online)'");
-        if (await c.ExecuteAsync("UPDATE PaymentMethods SET Label='PayMongo' WHERE MethodCode='paymongo' AND Label='GCash / Maya / Card (online)'") > 0)
-            await c.ExecuteAsync("UPDATE PaymentMethods SET IsOn=0 WHERE MethodCode='paypal'");
         // a unique index on SKU (ignored when it already exists)
         try { await c.ExecuteAsync("CREATE UNIQUE INDEX UX_Products_Sku ON Products(Sku)"); } catch (MySqlException) { }
     }

@@ -219,7 +219,7 @@ static class DeliveryEndpoints
     {
         var r = await LoadAsync(c, id);
         if (r is null || r.LalamoveOrderId is null || r.LalamoveStatus is null || r.LalamoveStatus is "MANUAL" or "BOOKING" || LalamoveService.Final.Contains(r.LalamoveStatus) || !lala.IsReady) return r;
-        if (!force && r.LalamoveCheckedAt != null && (DateTime.Now - r.LalamoveCheckedAt.Value).TotalSeconds < 25) return r;
+        if (!force && r.LalamoveCheckedAt != null && (Promos.Now - r.LalamoveCheckedAt.Value).TotalSeconds < 25) return r;
         var (st, drv, link, price, err) = await lala.GetAsync(r.LalamoveOrderId);
         if (err != null || st is null) return r;
         var driver = r.LalamoveDriver;

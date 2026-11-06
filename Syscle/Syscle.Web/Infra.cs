@@ -37,7 +37,9 @@ static class Cfg
     {
         ["StoreName"] = "Web-Syscle", ["StoreTagline"] = "Shop & Customize", ["DeliveryFee"] = "100", ["LowStockThreshold"] = "5", ["MaxFeatured"] = "12",
         ["AdminIdleSeconds"] = "300", ["UnpaidOnlineHours"] = "2", ["PickupHoldDays"] = "2", ["RefundWindowDays"] = "7",
-        ["DailyExpenses"] = "0", ["DefaultMarginPct"] = "30", ["PromoPopup"] = "1"
+        ["DailyExpenses"] = "0", ["DefaultMarginPct"] = "30", ["PromoPopup"] = "1",
+        ["DeliveryMaxKm"] = "8", ["DeliveryBaseFee"] = "50", ["DeliveryPerKm"] = "12", ["LalamoveService"] = "MOTORCYCLE", ["AutoPrintReceipt"] = "1", ["CodMax"] = "5000",
+        ["ReceiptFooter"] = "Thank you for shopping with us! Please keep this receipt for returns and warranty."
     };
     static readonly ConcurrentDictionary<string, (string v, DateTime at)> Cache = new();
     public static void Clear() => Cache.Clear();
@@ -238,8 +240,8 @@ class ExpireRow { public int OrderId { get; set; } public string Code { get; set
 
 class OrderExpiryService : BackgroundService
 {
-    readonly Db _db; readonly EmailService _mail;
-    public OrderExpiryService(Db db, EmailService mail) { _db = db; _mail = mail; }
+    readonly Db _db; readonly EmailService _mail; readonly LalamoveService _lala;
+    public OrderExpiryService(Db db, EmailService mail, LalamoveService lala) { _db = db; _mail = mail; _lala = lala; }
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         try { await Task.Delay(TimeSpan.FromSeconds(30), stop); } catch (OperationCanceledException) { return; }
@@ -256,6 +258,9 @@ class OrderExpiryService : BackgroundService
     {
         using var c = _db.Open();
         await LoginGuard.CleanAsync(c);
+        // booked Lalamove riders: keep the order status in step even when nobody has the order page open
+        foreach (var oid in (await c.QueryAsync<int>("SELECT OrderId FROM Orders WHERE LalamoveStatus IN ('ASSIGNING_DRIVER','ON_GOING','PICKED_UP') LIMIT 50")).ToList())
+        { try { await DeliveryEndpoints.RefreshAsync(c, _lala, oid, true); } catch (Exception ex) { Console.WriteLine("[Syscle] Lalamove refresh failed: " + ex.Message); } }
         var unpaidHours = await Cfg.IntAsync(c, "UnpaidOnlineHours", 1, 720); var holdDays = await Cfg.IntAsync(c, "PickupHoldDays", 0, 90);
         var cut = Promos.Today.AddDays(-holdDays);
         const string head = "SELECT o.OrderId, CONCAT('ORD-', LPAD(o.OrderId,6,'0')) AS Code, o.CustomerName, u.Email, IFNULL(u.EmailNotify,1) AS EmailNotify, ";

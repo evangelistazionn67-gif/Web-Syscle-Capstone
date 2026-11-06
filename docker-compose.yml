@@ -13,6 +13,9 @@ services:
       Security__TrustProxy: "${TRUST_PROXY:-false}"
       # set SECURE_COOKIES=true once the site is served over HTTPS (keeps the sign-in cookie off plain HTTP). Leave false for http://localhost:8080.
       Security__SecureCookies: "${SECURE_COOKIES:-false}"
+      Lalamove__ApiKey: "${LALAMOVE_API_KEY:-}"
+      Lalamove__Secret: "${LALAMOVE_SECRET:-}"
+      Lalamove__Mode: "${LALAMOVE_MODE:-sandbox}"
       # the address of your live site, used in password-reset emails (required on a live site; no trailing slash)
       App__PublicUrl: "${PUBLIC_URL:-}"
       # email: either SMTP (for example Gmail with an App Password) or SendGrid
