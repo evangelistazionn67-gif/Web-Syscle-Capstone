@@ -18,14 +18,15 @@
   </main>
   <div class="sy-modal" id="item-modal"><div class="sy-modal-box">
     <h3 id="item-modal-title">Add item</h3>
-    <label>Category</label><select id="f-cat"></select><a class="sy-sublink" href="admin_storefront.html">Need a new bike category? Create it in Store-front Config</a><label>Item type</label><select id="f-type-sel"></select><input id="f-type" placeholder="Type the new item type" maxlength="60" style="display:none">
+    <label for="f-type-sel">Item type</label><select id="f-type-sel"></select>
     <label>Product name</label><input id="f-name" maxlength="100"><label>Price (PHP)</label><input id="f-price" type="number" min="0" step="0.01">
     <label>Stock</label><input id="f-stock" type="number" min="0" step="1">
     <label>Sizes (optional)</label><select id="f-size-sel"></select><input id="f-sizes" placeholder="e.g. 26,27.5,29" maxlength="200">
     <label for="f-desc">Description (what it is and what it is for)</label><textarea id="f-desc" rows="3" maxlength="2000"></textarea>
     <label for="f-specs">Specifications (one per line, like "Weight: 450 g")</label><textarea id="f-specs" rows="4" maxlength="2000" placeholder="Material: Alloy&#10;Hub width: 100 mm&#10;Weight: 450 g"></textarea>
     <label>Fits these bike types</label><div id="f-fit" class="sy-fitbox"></div>
-    <label for="f-sku">SKU (printed on the QR label; leave empty to make one)</label><input id="f-sku" maxlength="30" placeholder="SYS-00001">
+    <label for="f-sku">SKU (printed on the QR label; type the 5 numbers, or leave empty to make one)</label>
+    <div class="sy-skufield"><span class="sy-skupre">SYS -</span><input id="f-sku" inputmode="numeric" maxlength="5" pattern="[0-9]{5}" autocomplete="off" placeholder="_ _ _ _ _" aria-label="SKU number, 5 digits"></div>
     <label for="f-cost">Cost price (optional, only the admin sees it; used for the profit estimate)</label><input id="f-cost" type="number" min="0" step="0.01">
     <label>Picture (optional, .jpg/.png/.webp under 3 MB)</label><input id="f-image" type="file" accept="image/*"><img id="f-preview" class="sy-preview" alt="" style="display:none">
     <label>Color Variants (Optional)</label>

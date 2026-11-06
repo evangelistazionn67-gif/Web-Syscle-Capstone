@@ -26,6 +26,8 @@ builder.Services.AddSingleton(new Db(cs));
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddSingleton<SmsService>();
 builder.Services.AddSingleton<PayMongoService>();
+builder.Services.AddSingleton<LalamoveService>();
+builder.Services.AddSingleton<QrPhService>();
 builder.Services.AddSingleton<PayPalService>();
 builder.Services.AddHostedService<OrderExpiryService>();
 // the keys that sign login cookies and reset links are kept in the database (table DataProtectionKeys), not in text files on the disk
@@ -73,7 +75,7 @@ app.Use(async (ctx, next) =>
     if (ctx.Request.IsHttps) ctx.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";   // once a browser has seen the HTTPS site it refuses to use plain HTTP for a year
     ctx.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";   // the admin "see the customer side" preview is a frame of this same site
     ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-    ctx.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()";   // camera is needed for scanning order QR codes
+    ctx.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=(self)";   // camera: scanning order QR codes. location: "use my location" when pinning a delivery place
     if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.Headers["Cache-Control"] = "no-store";
     // normal JSON requests are tiny; cap them so nobody can flood the server with a giant body (uploads use multipart and keep their own limit)
     if (ctx.Request.Path.StartsWithSegments("/api") && (ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
@@ -102,7 +104,11 @@ app.Use(async (ctx, next) =>
     await next();
 });
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = r =>
+{
+    // pages, scripts and styles are re-checked on every visit (a quick "not changed" answer when nothing changed), so an update shows without a hard refresh
+    var n = r.File.Name.ToLowerInvariant(); if (n.EndsWith(".html") || n.EndsWith(".js") || n.EndsWith(".css")) r.Context.Response.Headers["Cache-Control"] = "no-cache";
+} });
 
 IResult Bad(string m) => Results.BadRequest(new { error = m });
 IResult Conflict(string m) => Results.Conflict(new { error = m });
@@ -424,10 +430,10 @@ shop.MapGet("/cart/bundles", async (ClaimsPrincipal u, Db db) => { using var c =
 shop.MapPost("/promo", async (PromoReq r, ClaimsPrincipal u, Db db) => { using var c = db.Open(); var (pct, perr) = await Promos.Check(c, (r.Code ?? "").Trim(), null, Uid(u)); return pct is null ? Results.NotFound(new { error = perr ?? "Invalid code." }) : Results.Ok(new { percent = pct }); });
 shop.MapGet("/payment-methods", async (Db db, PayMongoService pm) =>
 {
-    // The two ways to pay: cash at the store, or online through PayMongo (GCash, Maya, QR Ph, cards and other networks). An online method whose PayMongo key is not set yet is shown but cannot be picked.
-    using var c = db.Open();
-    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label FROM PaymentMethods WHERE IsOn=1 AND MethodCode IN ('cash','paymongo') ORDER BY FIELD(MethodCode,'cash','paymongo')");
-    return Results.Ok(rows.Select(m => new { code = m.Code, label = m.Label, ready = m.Code != "paymongo" || pm.IsReady, online = m.Code == "paymongo" }));
+    // every payment method the store switched on is shown. An online one whose keys are not set yet is marked (test mode lets it be tried with a fake payment page).
+    using var c = db.Open(); var test = cfg.GetValue("Payments:TestMode", false);
+    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label, AccountNumber, AccountName FROM PaymentMethods WHERE IsOn=1 AND MethodCode<>'qrph'");
+    return Results.Ok(rows.Select(m => { var ready = m.Code == "paymongo" ? pm.IsReady : m.Code == "paypal" ? pp.IsReady : true; return new { code = m.Code, label = m.Label, accountNumber = m.AccountNumber, accountName = m.AccountName, ready, test = !ready && test, online = m.Code is "paymongo" or "paypal" }; }));
 });
 
 shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailService emailer, PayMongoService pm, PayPalService pp, HttpRequest req, IConfiguration cfg) =>
@@ -435,26 +441,34 @@ shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailS
     using var c = db.Open(); using var tx = c.BeginTransaction(); var uid = Uid(u);
     var lines = (await c.QueryAsync<Line>("SELECT p.ProductId, p.Name, p.Price, ci.Qty, ci.Size, ci.Color FROM CartItems ci JOIN Products p ON p.ProductId=ci.ProductId WHERE ci.UserId=@uid FOR UPDATE OF ci", new { uid }, tx)).ToList();   // FOR UPDATE: a second checkout from the same customer (double click, two tabs) waits here, then finds the cart already empty
     if (lines.Count == 0) return Bad("Cart empty.");
-    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1 AND MethodCode IN ('cash','paymongo')", new { m = r.PaymentMethod }, tx);
-    if (method is null) return Bad("Invalid payment.");
-    var online = r.PaymentMethod == "paymongo";
-    if (online && !pm.IsReady) return Bad("Online payment is not available right now. Please choose another method.");
+    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1", new { m = r.PaymentMethod }, tx);
+    if (method is null || r.PaymentMethod == "qrph") return Bad("Invalid payment.");
+    var online = r.PaymentMethod is "paymongo" or "paypal"; var providerReady = r.PaymentMethod == "paypal" ? pp.IsReady : pm.IsReady; var testPay = online && !providerReady && cfg.GetValue("Payments:TestMode", false);
+    if (online && !providerReady && !testPay) return Bad("This online payment is not set up yet. Please choose another method.");
     // Home delivery: the customer gives an address and a phone number the rider can call. The delivery fee is set by the store.
-    var delivery = r.Fulfillment == "Delivery"; string? addr = null, dphone = null; decimal fee = 0;
+    var delivery = r.Fulfillment == "Delivery"; string? addr = null, dphone = null; decimal fee = 0; int codMax = 0; double dkm = 0; double? dlat = null, dlng = null;
     if (delivery)
     {
         addr = Regex.Replace((r.Address ?? "").Trim(), @"\s+", " "); dphone = (r.Phone ?? "").Trim();
         if (addr.Length < 10 || addr.Length > 250) return Bad("Enter your full delivery address (house number, street, barangay, city).");
         if (!Regex.IsMatch(dphone, @"^[0-9+\- ]{7,20}$")) return Bad("Enter a phone number the rider can call.");
-        var feeText = await c.ExecuteScalarAsync<string>("SELECT SettingValue FROM Settings WHERE SettingKey='DeliveryFee'", null, tx);
-        fee = decimal.TryParse(feeText, out var fv) && fv >= 0 && fv <= 5000 ? fv : 100m;
+        // the store delivers by itself within a set range. The pin on the map is measured here; the fee is worked out here, never taken from the browser.
+        if (!Geo.ValidPoint(r.Lat, r.Lng)) return Bad("Pin your delivery place on the map so we can check the distance.");
+        // settings are read on their own connection: this one is busy with the order transaction
+        DeliveryRule rule; using (var c2 = db.Open()) { rule = await DeliveryRules.LoadAsync(c2); codMax = await Cfg.IntAsync(c2, "CodMax", 0, 1000000); }
+        if (!rule.Enabled) return Bad("Home delivery is not available right now. Please choose Store pick-up.");
+        dkm = Geo.RoadKm(rule.StoreLat, rule.StoreLng, r.Lat!.Value, r.Lng!.Value);
+        if ((decimal)dkm > rule.MaxKm) return Bad($"Sorry, we deliver only within {rule.MaxKm:0.#} km of the store. Your place is about {dkm:0.#} km away. Please choose Store pick-up.");
+        fee = DeliveryRules.Fee(rule, dkm); dlat = r.Lat; dlng = r.Lng;
     }
     if (r.PickupDate is null || r.PickupDate.Value.Date < Promos.Today || r.PickupDate.Value.Date > Promos.Today.AddDays(30)) return Bad("Invalid date.");
     var pct = 0; string? code = null;
     if (!string.IsNullOrWhiteSpace(r.PromoCode)) { code = r.PromoCode.Trim(); var (found, promoErr) = await Promos.Check(c, code, tx, uid); if (found is null) return Bad(promoErr ?? "Invalid promo."); pct = found.Value; }
     var sub = lines.Sum(l => l.Price * l.Qty); var (bundleDiscount, _) = await Bundles.ForCart(c, uid, tx); var discount = Math.Round((sub - bundleDiscount) * pct / 100m, 2); var total = sub - bundleDiscount - discount + fee;
+    // cash on delivery is allowed, but only up to the limit the store sets (0 = no limit), because the money is collected after the goods are handed over
+    if (delivery && r.PaymentMethod == "cash" && codMax > 0 && total > codMax) return Bad($"Cash on delivery is only for orders up to ₱{codMax:N0}. Please pay with GCash or PayMongo, or choose Store pick-up.");
     var name = await c.ExecuteScalarAsync<string>("SELECT Username FROM Users WHERE UserId=@uid", new { uid }, tx);
-    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee) VALUES(@uid,@name,'Online',@method,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee)", new { uid, name, method, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee }, tx);
+    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PaymentRef,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee,DeliveryLat,DeliveryLng,DeliveryKm) VALUES(@uid,@name,'Online',@method,@payRef,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee,@dlat,@dlng,@dkmv)", new { uid, name, method, payRef, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee, dlat, dlng, dkmv = delivery ? (double?)dkm : null }, tx);
     var orderId = await c.ExecuteScalarAsync<int>("SELECT CAST(LAST_INSERT_ID() AS SIGNED)", null, tx);
     var soldOut = await Orders.TakeStock(c, tx, orderId, lines);
     if (soldOut != null) return Conflict($"Out of stock: {soldOut}");
@@ -513,18 +527,22 @@ app.MapPost("/api/webhooks/paymongo", async (HttpRequest req, Db db, PayMongoSer
     try
     {
         using var doc = JsonDocument.Parse(payload); var attrs = doc.RootElement.GetProperty("data").GetProperty("attributes");
-        if (attrs.GetProperty("type").GetString() == "checkout_session.payment.paid") sid = attrs.GetProperty("data").GetProperty("id").GetString();
-    }
-    catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not be read: " + ex.Message); return Results.Ok(new { ok = true }); }   // a payload we cannot read will not get better by retrying
-    if (sid != null)
-    {
-        try { using var c = db.Open(); await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + " WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid }); }
-        catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not save the payment: " + ex.Message); return Results.StatusCode(500); }   // an error status makes PayMongo send the event again later
+        if (attrs.GetProperty("type").GetString() == "checkout_session.payment.paid")
+        {
+            var sid = attrs.GetProperty("data").GetProperty("id").GetString(); using var c = db.Open();
+            await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid });
+        }
+        else if (attrs.GetProperty("type").GetString() == "payment.paid")
+        {
+            // in-shop QR Ph payment: the payment names the payment intent that was saved on the order
+            var pid = attrs.GetProperty("data").GetProperty("attributes").GetProperty("payment_intent_id").GetString(); using var c = db.Open();
+            if (!string.IsNullOrEmpty(pid)) await QrPay.MarkPaidByIntentAsync(c, pid);
+        }
     }
     return Results.Ok(new { ok = true });
 });
 
-shop.MapGet("/orders", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.PickupDate AS pickup, o.PaymentMethod AS payment, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE o.UserId=@uid ORDER BY o.OrderId DESC", new { uid = Uid(u) })); });
+shop.MapGet("/orders", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.PickupDate AS pickup, o.PaymentMethod AS payment, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.DeliveryKm AS deliveryKm, o.LalamoveStatus AS lalamoveStatus, o.LalamoveLink AS lalamoveLink, o.LalamoveDriver AS lalamoveDriver, o.LalamoveCost AS lalamoveCost, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE o.UserId=@uid ORDER BY o.OrderId DESC", new { uid = Uid(u) })); });
 shop.MapPost("/orders/{id:int}/cancel", async (int id, ClaimsPrincipal u, Db db) =>
 {
     using var c = db.Open(); using var tx = c.BeginTransaction();
@@ -539,11 +557,11 @@ var admin = app.MapGroup("/api/admin").RequireAuthorization("Admin");
 
 
 // ---------- store info (shown in the help window; edited by admins in Settings) ----------
-string[] StoreKeys = { "StoreName", "StoreTagline", "StoreAddress", "StorePhone", "StoreHours", "PickupNote", "DeliveryFee" };
+string[] StoreKeys = { "StoreName", "StoreTagline", "StoreAddress", "StorePhone", "StoreHours", "PickupNote", "DeliveryFee", "StoreLat", "StoreLng", "DeliveryMaxKm", "DeliveryBaseFee", "DeliveryPerKm", "LalamoveService", "ReceiptFooter", "StoreTIN", "AutoPrintReceipt", "CodMax" };
 async Task<Dictionary<string, string>> StoreInfo(MySqlConnection c)
 {
     var rows = await c.QueryAsync<KV>("SELECT SettingKey AS K, IFNULL(SettingValue,'') AS V FROM Settings WHERE SettingKey IN @keys", new { keys = StoreKeys });
-    var d = StoreKeys.ToDictionary(k => k, _ => ""); foreach (var row in rows) d[row.K] = row.V; if (d["StoreName"] == "") d["StoreName"] = "Web-Syscle"; if (!rows.Any(x => x.K == "DeliveryFee")) d["DeliveryFee"] = "100"; return d;
+    var d = StoreKeys.ToDictionary(k => k, _ => ""); foreach (var row in rows) d[row.K] = row.V; if (d["StoreName"] == "") d["StoreName"] = "Web-Syscle"; foreach (var k in StoreKeys) if (d[k] == "" && Cfg.Defaults.TryGetValue(k, out var dv)) d[k] = dv; return d;
 }
 app.MapGet("/api/store-info", async (Db db) =>
 {
@@ -666,9 +684,11 @@ admin.MapPut("/store-info", async (Dictionary<string, string?> r, Db db) =>
     foreach (var k in StoreKeys) if (r.TryGetValue(k, out var v))
     {
         v = (v ?? "").Trim(); if (v.Length > 200) return Bad("Each field can be up to 200 characters.");
+        if ((k == "StoreLat" || k == "StoreLng") && v != "" && !double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)) return Bad("The store location must be numbers, like 14.5995 and 120.9842.");
+        if ((k == "DeliveryMaxKm" || k == "DeliveryBaseFee" || k == "DeliveryPerKm" || k == "CodMax") && v != "" && !(decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var nv) && nv >= 0 && nv <= 5000)) return Bad("Delivery range and prices must be numbers (0 or more).");
         await c.ExecuteAsync("INSERT INTO Settings(SettingKey,SettingValue) VALUES(@k,@v) ON DUPLICATE KEY UPDATE SettingValue=@v", new { k, v });
     }
-    return Results.Ok(new { ok = true });
+    Cfg.Clear(); return Results.Ok(new { ok = true });
 });
 
 admin.MapPost("/categories", async (HttpRequest req, Db db, IWebHostEnvironment env) =>
@@ -752,7 +772,7 @@ admin.MapGet("/products", async (Db db) =>
     foreach (var p in prods) p.variants = allVariants.Where(v => v.productId == p.id).ToList();
     return Results.Ok(prods);
 });
-string? CheckProduct(ProductReq r) => string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100 ? "Invalid name." : string.IsNullOrWhiteSpace(r.ItemType) || r.ItemType.Trim().Length > 60 ? "Invalid item type." : r.Price < 0 ? "Invalid price." : r.Stock < 0 ? "Invalid stock." : (r.Description ?? "").Length > 2000 ? "The description is too long (2000 characters max)." : (r.Specs ?? "").Length > 2000 ? "The specifications are too long (2000 characters max)." : (r.FitTags ?? "").Length > 250 ? "Fit tags are too long." : (r.Sku ?? "").Trim().Length > 30 || !Regex.IsMatch((r.Sku ?? "").Trim(), @"^[A-Za-z0-9_-]*$") ? "SKU may use letters, numbers, dashes and underscores (30 max)." : r.CostPrice is < 0 or > 10000000 ? "Invalid cost price." : null;
+string? CheckProduct(ProductReq r) => string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100 ? "Invalid name." : string.IsNullOrWhiteSpace(r.ItemType) || r.ItemType.Trim().Length > 60 ? "Invalid item type." : r.Price < 0 ? "Invalid price." : r.Stock < 0 ? "Invalid stock." : (r.Description ?? "").Length > 2000 ? "The description is too long (2000 characters max)." : (r.Specs ?? "").Length > 2000 ? "The specifications are too long (2000 characters max)." : (r.FitTags ?? "").Length > 250 ? "Fit tags are too long." : (r.Sku ?? "").Trim().Length > 30 || !Regex.IsMatch((r.Sku ?? "").Trim(), @"^(SYS-\d{5})?$", RegexOptions.IgnoreCase) ? "SKU must be SYS- followed by exactly 5 numbers." : r.CostPrice is < 0 or > 10000000 ? "Invalid cost price." : null;
 async Task<bool> DuplicateProduct(MySqlConnection c, ProductReq r, int selfId) =>
     await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Products WHERE LOWER(Name)=LOWER(@n) AND CategoryId=@cat AND ProductId<>@selfId", new { n = r.Name!.Trim(), cat = r.CategoryId, selfId }) > 0
     || (Nz(r.Sku) != null && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Products WHERE Sku=@sku AND ProductId<>@selfId", new { sku = Nz(r.Sku)!.ToUpperInvariant(), selfId }) > 0)
@@ -811,7 +831,7 @@ admin.MapGet("/transactions", async (string? search, string? status, string? sta
     using var c = db.Open();
     var p = new { search = Nz(search), like = "%" + Nz(search) + "%", status, startDate = fromDate, endDate = toDate };
     const string filter = @"(@search IS NULL OR CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) LIKE @like OR o.CustomerName LIKE @like) AND (@startDate IS NULL OR o.CreatedAt >= @startDate) AND (@endDate IS NULL OR o.CreatedAt < @endDate)";
-    var rows = await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.CustomerName AS customer, o.UserId AS userId, o.PaymentMethod AS payment, o.PaymentRef AS paymentRef, o.PickupDate AS pickup, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE " + filter + " AND (@status IS NULL OR o.Status = @status) ORDER BY o.OrderId DESC", p);
+    var rows = await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.CustomerName AS customer, o.UserId AS userId, o.PaymentMethod AS payment, o.PaymentRef AS paymentRef, o.PickupDate AS pickup, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.DeliveryKm AS deliveryKm, o.LalamoveStatus AS lalamoveStatus, o.LalamoveLink AS lalamoveLink, o.LalamoveDriver AS lalamoveDriver, o.LalamoveCost AS lalamoveCost, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE " + filter + " AND (@status IS NULL OR o.Status = @status) ORDER BY o.OrderId DESC", p);
     // the four counters follow the same date range and search as the list, so the numbers always match what is on screen
     var summary = await c.QueryFirstAsync(@"SELECT COUNT(*) AS total, IFNULL(SUM(CASE WHEN o.Status='Completed' THEN 1 ELSE 0 END),0) AS completed, IFNULL(SUM(CASE WHEN o.Status='Pending' THEN 1 ELSE 0 END),0) AS pending, IFNULL(SUM(CASE WHEN o.Status='Preparing' THEN 1 ELSE 0 END),0) AS preparing, IFNULL(SUM(CASE WHEN o.Status='Ready' THEN 1 ELSE 0 END),0) AS ready, IFNULL(SUM(CASE WHEN o.Status='Cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM Orders o WHERE " + filter, new { p.search, p.like, p.startDate, p.endDate });
     return Results.Ok(new { summary, rows });
@@ -832,10 +852,14 @@ admin.MapPost("/transactions/walkin", async (WalkinReq r, Db db, ClaimsPrincipal
         p.Size = size; p.Color = g.Key.Color; p.Qty = g.Sum(x => x.Qty); lines.Add(p);
     }
     var total = lines.Sum(l => l.Price * l.Qty); var cust = Nz(r.CustomerName) ?? "Walk-in";
-    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,PaidAt,PaymentConfirmedBy,ItemsConfirmedAt,ItemsConfirmedBy,CompletedAt) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Completed','Paid',NOW(),@by,NOW(),@by,NOW())", new { cust, method, total, by = u.Identity?.Name }, tx);
+    // QR Ph: the sale is saved unpaid (stock is held) and finishes by itself when the customer's scan is paid
+    var qr = r.PaymentMethod == "qrph";
+    if (qr && total < 20m) return Bad("QR payment needs at least ₱20. Use cash for a smaller sale.");
+    await c.ExecuteAsync(qr ? @"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,ItemsConfirmedAt,ItemsConfirmedBy) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Preparing','Unpaid',NOW(),@by)"
+        : @"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,PaidAt,PaymentConfirmedBy,ItemsConfirmedAt,ItemsConfirmedBy,CompletedAt) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Completed','Paid',NOW(),@by,NOW(),@by,NOW())", new { cust, method, total, by = u.Identity?.Name }, tx);
     var orderId = await c.ExecuteScalarAsync<int>("SELECT CAST(LAST_INSERT_ID() AS SIGNED)", null, tx);
     var soldOut = await Orders.TakeStock(c, tx, orderId, lines, "Walk-in sale", "WLK-", u.Identity?.Name); if (soldOut != null) return Conflict($"Out of stock: {soldOut}");
-    var orderCode = "WLK-" + orderId.ToString("D6"); tx.Commit(); return Results.Ok(new { orderCode, total });
+    var orderCode = "WLK-" + orderId.ToString("D6"); tx.Commit(); return Results.Ok(new { orderCode, orderId, total, qr });
 });
 admin.MapPut("/transactions/{id:int}/status", async (int id, StatusReq r, Db db, EmailService emailer, ClaimsPrincipal u) =>
 {
@@ -851,6 +875,7 @@ admin.MapPut("/transactions/{id:int}/status", async (int id, StatusReq r, Db db,
     if (r.Status == "Completed" && ol!.PaymentStatus != "Paid") return Conflict("The payment is not recorded yet. Confirm the payment first (online payments are recorded automatically).");
     if (ol!.RefundStatus == "Requested" && r.Status != "Cancelled") return Conflict("The customer asked for a refund. Answer the refund request first.");
     if (r.Status == "Cancelled" && ol.PaymentStatus == "Paid" && ol.RefundStatus != "Refunded") return Conflict("This order is already paid. Cancel it through a refund so the money is returned first.");
+    if (r.Status == "Cancelled" && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE OrderId=@id AND LalamoveStatus IN ('BOOKING','ASSIGNING_DRIVER','ON_GOING','PICKED_UP','MANUAL')", new { id }, tx) > 0) return Conflict("A Lalamove rider is booked for this order. Cancel the booking first (Delivery button), then cancel the order.");
     if (r.Status == "Cancelled") await StockLog.ReturnOrder(c, tx, id, u.Identity?.Name);
     var courier = Nz(r.Courier); var trackNo = Nz(r.TrackingNo); if (courier != null && courier.Length > 60) courier = courier[..60]; if (trackNo != null && trackNo.Length > 60) trackNo = trackNo[..60];
     await c.ExecuteAsync("UPDATE Orders SET Status=@s, Courier=IFNULL(@courier,Courier), TrackingNo=IFNULL(@trackNo,TrackingNo), ReadyAt=IF(@s IN ('Ready','Out for Delivery'),NOW(),ReadyAt), CompletedAt=IF(@s='Completed',NOW(),CompletedAt) WHERE OrderId=@id", new { s = r.Status, id, courier, trackNo }, tx);
@@ -1059,6 +1084,8 @@ admin.MapPost("/accounts/{id:int}/password", async (int id, PasswordSetReq r, Cl
 admin.MapDelete("/accounts/{id:int}", async (int id, ClaimsPrincipal u, Db db) => { if (id == Uid(u)) return Bad("Can't delete self."); using var c = db.Open(); if (!await CanManage(c, u, id)) return Denied(); await c.ExecuteAsync("DELETE FROM Users WHERE UserId=@id", new { id }); return Results.Ok(new { ok = true }); });
 
 Features.Map(app);
+DeliveryEndpoints.Map(app); QrPay.Map(app);
+Receipts.Map(app);
 app.Run();
 
 record RegisterReq(string? Username, string? Email, string? Password, string? Phone = null);
@@ -1087,7 +1114,7 @@ record VariantReq(string? ColorName, string? ImagePath);
 record CartReq(int ProductId, int Qty, string? Size, string? Color);
 record QtyReq(int Qty, string? Size, string? Color);
 record PromoReq(string? Code);
-record CheckoutReq(DateTime? PickupDate, string? PromoCode, string? PaymentMethod, string? PaymentRef = null, string? Fulfillment = null, string? Address = null, string? Phone = null);
+record CheckoutReq(DateTime? PickupDate, string? PromoCode, string? PaymentMethod, string? PaymentRef = null, string? Fulfillment = null, string? Address = null, string? Phone = null, double? Lat = null, double? Lng = null);
 record ItemReq(int ProductId, int Qty, string? Size, string? Color);
 record WalkinReq(string? CustomerName, string? PaymentMethod, List<ItemReq>? Items);
 record StatusReq(string? Status, string? Courier = null, string? TrackingNo = null);
@@ -1402,8 +1429,8 @@ public class PayMongoService
             object Body(string[] methods) => new { data = new { attributes = new {
                 send_email_receipt = false, show_description = true, show_line_items = true, description = "Web-Syscle order " + orderCode, reference_number = orderCode,
                 line_items = new[] { new { currency = "PHP", amount = (int)Math.Round(total * 100m), name = "Order " + orderCode, quantity = 1 } },
-                payment_method_types = methods, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
-            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", Body(Methods)); var text = await res.Content.ReadAsStringAsync();
+                payment_method_types = (_config["PayMongo:QrPh"] ?? "").ToLowerInvariant() == "true" ? new[] { "gcash", "paymaya", "card", "qrph" } : new[] { "gcash", "paymaya", "card" }, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
+            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", body); var text = await res.Content.ReadAsStringAsync();
             if (!res.IsSuccessStatusCode)
             {
                 Console.WriteLine("[Syscle] PayMongo answered " + (int)res.StatusCode + " for the methods [" + string.Join(",", Methods) + "]: " + (text.Length > 300 ? text[..300] : text));
@@ -1729,6 +1756,9 @@ static class Seed
         await AddColumn(c, "Orders", "DeliveryFee", "DECIMAL(10,2) NOT NULL DEFAULT 0");
         await AddColumn(c, "Orders", "Courier", "VARCHAR(60) NULL");
         await AddColumn(c, "Orders", "TrackingNo", "VARCHAR(60) NULL");
+        await AddColumn(c, "Orders", "DeliveryLat", "DECIMAL(9,6) NULL"); await AddColumn(c, "Orders", "DeliveryLng", "DECIMAL(9,6) NULL"); await AddColumn(c, "Orders", "DeliveryKm", "DECIMAL(6,1) NULL");
+        await AddColumn(c, "Orders", "LalamoveOrderId", "VARCHAR(40) NULL"); await AddColumn(c, "Orders", "LalamoveStatus", "VARCHAR(20) NULL"); await AddColumn(c, "Orders", "LalamoveLink", "VARCHAR(400) NULL");
+        await AddColumn(c, "Orders", "LalamoveDriver", "VARCHAR(120) NULL"); await AddColumn(c, "Orders", "LalamoveCost", "DECIMAL(10,2) NULL"); await AddColumn(c, "Orders", "LalamoveCheckedAt", "DATETIME NULL");
         bool hadPaid = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='Orders' AND COLUMN_NAME='PaymentStatus'") > 0;
         await AddColumn(c, "Orders", "PaymentStatus", "VARCHAR(10) NOT NULL DEFAULT 'Unpaid'");
         await AddColumn(c, "Orders", "PaidAt", "DATETIME NULL");
@@ -1760,6 +1790,12 @@ static class Seed
         await AddColumn(c, "Bundles", "StartsAt", "DATE NULL"); await AddColumn(c, "Bundles", "EndsAt", "DATE NULL");
         await AddColumn(c, "Bundles", "Season", "VARCHAR(30) NULL"); await AddColumn(c, "Bundles", "Kind", "VARCHAR(10) NOT NULL DEFAULT 'Bundle'");
         await AddColumn(c, "Bundles", "Description", "VARCHAR(500) NULL"); await AddColumn(c, "Bundles", "ImagePath", "VARCHAR(260) NULL");
+        // in-shop QR Ph payment (shown on the sale screen only; never offered to online customers)
+        await c.ExecuteAsync("INSERT IGNORE INTO PaymentMethods (MethodCode, Label, IsOn) VALUES ('qrph','QR Ph (scan to pay)',1)");
+        // payment buttons are Cash, GCash and PayMongo. The old combined label becomes "PayMongo" (orders follow), and PayPal is switched off once
+        await c.ExecuteAsync("UPDATE Orders SET PaymentMethod='PayMongo' WHERE PaymentMethod='GCash / Maya / Card (online)'");
+        if (await c.ExecuteAsync("UPDATE PaymentMethods SET Label='PayMongo' WHERE MethodCode='paymongo' AND Label='GCash / Maya / Card (online)'") > 0)
+            await c.ExecuteAsync("UPDATE PaymentMethods SET IsOn=0 WHERE MethodCode='paypal'");
         // a unique index on SKU (ignored when it already exists)
         try { await c.ExecuteAsync("CREATE UNIQUE INDEX UX_Products_Sku ON Products(Sku)"); } catch (MySqlException) { }
     }

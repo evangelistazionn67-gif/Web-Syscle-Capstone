@@ -42,15 +42,14 @@
     const LK = await getLookups();
     TYPES = LK.itemTypes || []; COLORS = LK.colors || []; BIKES = LK.bikeTypes || [];
     SIZES = { '': '- No sizes -' }; (LK.sizeSets || []).forEach(z => { SIZES[z.sizes] = z.label; }); SIZES['Custom'] = 'Custom (type my own)...';
+    // the item types are fixed (no free typing)
+    const ITEM_TYPES = ['Accessory', 'Brakeset', 'Cockpit', 'Crankset', 'Drivetrain', 'Frameset', 'Wheelset', 'Others'];
     function fillTypeSel(cur) {
-        const used = items.map(x => x.itemType).filter(Boolean);
-        const list = [...new Set([...TYPES.filter(t => t !== 'Other'), ...used])].sort((a, b) => a.localeCompare(b));
+        // an older item whose type is not in the list keeps its type, so editing it does not change it by accident
+        const legacy = cur && !ITEM_TYPES.some(t => t.toLowerCase() === cur.toLowerCase()) ? [cur] : [];
         const sel = $('f-type-sel');
-        sel.innerHTML = '<option value="">— Pick item type —</option>' + list.map(t => `<option>${esc(t)}</option>`).join('') + '<option value="__other">Other (type a new one)…</option>';
-        const known = cur && list.some(t => t.toLowerCase() === cur.toLowerCase());
-        sel.value = !cur ? '' : known ? list.find(t => t.toLowerCase() === cur.toLowerCase()) : '__other';
-        $('f-type').style.display = sel.value === '__other' ? '' : 'none';
-        $('f-type').value = !cur ? '' : known ? list.find(t => t.toLowerCase() === cur.toLowerCase()) : cur;
+        sel.innerHTML = '<option value="">— Pick item type —</option>' + [...ITEM_TYPES, ...legacy].map(t => `<option>${esc(t)}</option>`).join('');
+        sel.value = !cur ? '' : ([...ITEM_TYPES, ...legacy].find(t => t.toLowerCase() === cur.toLowerCase()) || '');
     }
     function fillSizeSel(cur) {
         const sel = $('f-size-sel');
@@ -59,7 +58,8 @@
         $('f-sizes').style.display = sel.value === 'Custom' ? '' : 'none';
         $('f-sizes').value = cur || '';
     }
-    $('f-type-sel').addEventListener('change', () => { const v = $('f-type-sel').value; const o = v === '__other'; $('f-type').style.display = o ? '' : 'none'; $('f-type').value = o ? '' : v; });
+    // SKU: "SYS -" is fixed, only 5 digits can be typed
+    $('f-sku').addEventListener('input', () => { $('f-sku').value = $('f-sku').value.replace(/\D/g, '').slice(0, 5); });
     $('f-size-sel').addEventListener('change', () => { const v = $('f-size-sel').value; const c = v === 'Custom'; $('f-sizes').style.display = c ? '' : 'none'; $('f-sizes').value = c ? '' : v; });
 
     function renderVariants() {
@@ -80,17 +80,17 @@
 
     $('btn-add-variant').addEventListener('click', () => { currentVariants.push({ ColorName: '', ImagePath: '' }); renderVariants(); });
 
+    let modalCat = null;
     function openModal(p) {
         if (!cats.length) return toast('Create a category first.', true);
         editId = p ? p.id : null; editImage = p && p.image ? p.image : '';
         currentVariants = p && p.variants ? p.variants.map(v => ({ ColorName: v.colorName, ImagePath: v.image })) : [];
         renderVariants();
         $('item-modal-title').textContent = p ? 'Edit item' : 'Add item';
-        $('f-cat').innerHTML = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-        $('f-cat').value = p ? p.categoryId : (catFilter || cats[0].id);
+        modalCat = p ? p.categoryId : +(catFilter || cats[0].id);   // no category dropdown any more
         fillTypeSel(p ? p.itemType : ''); $('f-name').value = p ? p.name : '';
         $('f-price').value = p ? p.price : ''; $('f-stock').value = p ? p.stock : ''; fillSizeSel(p && p.sizes ? p.sizes : '');
-        $('f-desc').value = p && p.description || ''; $('f-specs').value = p && p.specs || ''; $('f-sku').value = p && p.sku || ''; $('f-cost').value = p && p.costPrice != null ? p.costPrice : '';
+        $('f-desc').value = p && p.description || ''; $('f-specs').value = p && p.specs || ''; { const m = /^SYS-(\d{5})$/i.exec(p && p.sku || ''); $('f-sku').value = m ? m[1] : ''; } $('f-cost').value = p && p.costPrice != null ? p.costPrice : '';
         const fitSel = new Set(String(p && p.fitTags || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
         $('f-fit').innerHTML = BIKES.map(b => `<label class="sy-check-line"><input type="checkbox" value="${esc(b)}"${fitSel.has(b.toLowerCase()) ? ' checked' : ''}> ${esc(b)}</label>`).join('') || '<span class="sy-muted">Add bike types in Lists and rules.</span>';
         $('f-image').value = '';
@@ -106,13 +106,14 @@
 
     $('f-save').addEventListener('click', async () => {
         const body = {
-            categoryId: +$('f-cat').value, itemType: $('f-type').value, name: $('f-name').value,
+            categoryId: modalCat, itemType: $('f-type-sel').value, name: $('f-name').value,
             price: parseFloat($('f-price').value), stock: parseInt($('f-stock').value), sizes: $('f-sizes').value,
-            description: $('f-desc').value.trim(), specs: $('f-specs').value.trim(), sku: $('f-sku').value.trim(), costPrice: $('f-cost').value === '' ? null : parseFloat($('f-cost').value),
+            description: $('f-desc').value.trim(), specs: $('f-specs').value.trim(), sku: $('f-sku').value ? 'SYS-' + $('f-sku').value : '', costPrice: $('f-cost').value === '' ? null : parseFloat($('f-cost').value),
             fitTags: [...$('f-fit').querySelectorAll('input:checked')].map(x => x.value).join(', '),
             variants: currentVariants.map(v => ({ ColorName: v.ColorName, ImagePath: v.ImagePath || '' }))
         };
         if (!body.name.trim() || !body.itemType.trim()) return toast('Enter the item type and product name.', true);
+        if ($('f-sku').value && $('f-sku').value.length !== 5) return toast('The SKU needs exactly 5 numbers after SYS-.', true);
         if (isNaN(body.price) || body.price < 0 || isNaN(body.stock) || body.stock < 0) return toast('Enter a valid price and stock.', true);
         if (items.some(x => x.id !== editId && x.categoryId === body.categoryId && x.name.trim().toLowerCase() === body.name.trim().toLowerCase())) return toast('This item already exists in this category. Edit the existing one instead.', true);
         const cn = body.variants.map(v => (v.ColorName || '').trim().toLowerCase()).filter(Boolean); if (new Set(cn).size !== cn.length) return toast('Each color can only be added once.', true);
