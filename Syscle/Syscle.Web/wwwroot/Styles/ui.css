@@ -273,15 +273,18 @@ body[data-area=admin]{padding-left:var(--side-w)}
 .cart-page-title{margin:2px 0 0}
 .cart-main-panel{display:grid;grid-template-columns:1.5fr 1fr;gap:22px;align-items:start}
 .cart-items-window{min-height:120px}.cart-items-window .sy-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:var(--r);padding:40px 16px}
-.order-summary-box{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:22px;box-shadow:var(--shadow);position:sticky;top:calc(var(--nav-h) + 16px)}
+.order-summary-box{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);position:sticky;top:calc(var(--nav-h) + 16px);display:flex;flex-direction:column;max-height:calc(100vh - var(--nav-h) - 32px);overflow:hidden}
+.sy-sumbody{padding:22px 22px 10px;overflow-y:auto;flex:1 1 auto;min-height:0}
+/* total + payment list + Place order are one pinned block, so the button is always on screen at normal zoom */
+.sy-paypanel{flex:none;border-top:1px solid var(--line);padding:6px 22px 18px;background:#fff;box-shadow:0 -8px 16px rgba(15,23,42,.06);display:grid;gap:10px;max-height:62vh;overflow-y:auto}
+.sy-paypanel .total-cost-row{margin:6px 0 0;padding-top:8px;font-size:24px}.sy-paypanel .order-number-text{margin:0}.sy-payblock label#pay-label{display:block;margin:0 0 6px;font-weight:700}
 .order-summary-box h2{font-size:22px}.summary-divider{border:0;border-top:1px solid var(--line);margin:10px 0 14px}
 .summary-meta-grid{display:grid;gap:10px}.summary-meta-grid>span{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:14px;flex-wrap:wrap}.right-align{text-align:right}
 .promo-input-group{display:flex;gap:8px;align-items:center}.promo-input-group label{margin:0;white-space:nowrap}.promo-input-group .promo-input{flex:1;min-width:0}
 .cart-right-column{display:flex;flex-direction:column;gap:14px}
 .proceed-checkout-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:16px;font-weight:800;font-size:17px;cursor:pointer;box-shadow:0 8px 20px rgba(255,90,31,.35)}.proceed-checkout-btn:hover{background:var(--accent-d)}
 .btn-cart-icon{display:none}.breakdown-headers{display:none}
-.sy-gcash{border:1.5px solid var(--info-l);background:#f0f6ff;border-radius:var(--r-sm);padding:14px;margin:8px 0;font-size:13.5px}.sy-gcash ol{margin:6px 0 10px 18px}.sy-gcash img{width:160px;height:160px;object-fit:contain;margin:8px auto;border:1px solid var(--line);border-radius:10px;background:#fff}.sy-gcash small{color:var(--muted)}
-@media(max-width:900px){.cart-main-panel{grid-template-columns:1fr}.order-summary-box{position:static}}
+@media(max-width:900px){.cart-main-panel{grid-template-columns:1fr}.order-summary-box{position:static;max-height:none;overflow:visible}.sy-sumbody{overflow:visible}.sy-paypanel{max-height:none;overflow:visible}}
 
 /* ---------- order progress tracker + orders page ---------- */
 .sy-orders{display:grid;gap:16px}
@@ -435,19 +438,6 @@ img,video,iframe,table{max-width:100%}
 .sy-idle-box{max-width:420px;text-align:center}.sy-idle-box h2{display:flex;gap:8px;justify-content:center;align-items:center}
 
 /* promo pop-up */
-.sy-promobox{max-width:520px}
-.sy-promo-head{display:flex;gap:14px;align-items:center;margin-bottom:14px;padding-right:30px}
-.sy-promo-head>.bi{font-size:38px;color:var(--accent)}.sy-promo-head h2{margin:0}.sy-promo-head p{color:var(--muted);margin:2px 0 0}
-.sy-pcodes{display:grid;gap:10px}
-.sy-pcode{display:flex;align-items:center;gap:12px;border:2px dashed var(--accent);background:var(--accent-l);border-radius:12px;padding:10px 12px}
-.sy-pcode .pc-pct{font-family:var(--head);font-size:30px;font-weight:700;color:var(--accent-d);line-height:1;text-align:center;min-width:64px}.sy-pcode .pc-pct small{display:block;font-size:12px;letter-spacing:1px}
-.sy-pcode .pc-body{flex:1;min-width:0}.sy-pcode .pc-body b{display:block;font-family:var(--head);font-size:22px;letter-spacing:1px}.sy-pcode .pc-body span{font-size:12.5px;color:var(--ink2)}
-.sy-promo-sub{margin:16px 0 8px;display:flex;gap:6px;align-items:center}
-.sy-pbundles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
-.sy-pbundle{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px;color:var(--ink);text-decoration:none!important}
-.sy-pbundle img,.sy-pbundle .ph{width:52px;height:52px;border-radius:8px;object-fit:cover;background:#f1f5f9;display:grid;place-items:center;flex-shrink:0}
-.sy-pbundle small{display:block;color:var(--muted)}
-.sy-promo-skip{display:flex;align-items:center;gap:8px;margin-top:14px;font-weight:500;color:var(--muted)}
 .sy-offers{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;margin:-4px 0 8px}
 .sy-offers .sy-chip{border:0;cursor:pointer}.sy-offers .sy-chip.accent{background:var(--accent-l);color:var(--accent-d)}
 .sy-chip.mute{background:#e2e8f0;color:var(--ink2)}.sy-chip.info{background:var(--info-l);color:var(--info)}
@@ -519,47 +509,41 @@ body[data-area=admin] .sy-page,body[data-area=admin] .sy-top{max-width:none}
 body[data-area=admin] .sy-page{max-width:var(--wrap)}
 html{-webkit-text-size-adjust:100%}
 
-/* v14 - important buttons never disappear at any zoom */
-/* the order summary used to be sticky and, once taller than the window (zoomed in), it covered the Place order button */
-.order-summary-box{position:static}
-.sy-cobar{position:fixed;left:0;right:0;bottom:0;z-index:840;background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(15,23,42,.14);padding:10px clamp(14px,3vw,28px) calc(10px + env(safe-area-inset-bottom,0px))}
-.sy-cobar[hidden]{display:none}
-.sy-cobar-in{max-width:var(--wrap);margin:0 auto;display:flex;align-items:center;justify-content:flex-end;gap:16px}
-.sy-cobar-total{margin-right:auto;line-height:1.15;min-width:0}.sy-cobar-total small{display:block;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}.sy-cobar-total b{font-size:clamp(18px,2.4vw,24px);font-family:var(--head)}
-.sy-cobar .proceed-checkout-btn{width:auto;flex:0 1 320px;min-width:180px;padding:14px 28px}
-body.has-cobar{padding-bottom:92px}
-body.has-cobar .support-btn{bottom:92px}
-@media(max-width:520px){.sy-cobar-in{gap:10px}.sy-cobar .proceed-checkout-btn{flex:1 1 auto;min-width:0;padding:14px 16px;font-size:16px}}
-/* buttons at the bottom of a pop-up stay in view while the pop-up content scrolls (zoomed in or small screens) */
-.sy-ovbox .sy-modal-actions,.sy-ovbox .sy-pm-actions,.sy-modal-box .sy-modal-actions{position:sticky;bottom:-28px;background:#fff;padding:12px 0 2px;margin-bottom:-2px;z-index:2;border-top:1px solid var(--line)}
-/* walk-in sale: the record button follows the screen */
-#btn-generate{display:none}
-body[data-area=admin] .sy-cobar{left:var(--side-w)}@media(max-width:980px){body[data-area=admin] .sy-cobar{left:0}}
-/* payment choices: one clear button per method */
-.sy-payopt{min-height:58px}.sy-payopt:hover:not(.off){border-color:var(--accent)}
-body.has-cobar .support-btn{width:46px;height:46px;right:12px;bottom:96px}
+/* pop-up card for every new online order (admin pages) */
+.sy-ordtoasts{position:fixed;top:calc(var(--nav-h) + 12px);right:16px;z-index:4000;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+.sy-ordtoast{pointer-events:auto;display:flex;align-items:stretch;background:var(--card);color:var(--ink);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:var(--r-sm);box-shadow:var(--shadow-lg);animation:syslidein .3s ease-out}
+.sy-ordtoast.out{opacity:0;transform:translateX(24px);transition:opacity .25s,transform .25s}
+.sy-ordtoast .body{flex:1;display:flex;gap:12px;align-items:center;padding:12px 6px 12px 12px;color:inherit;text-decoration:none;min-width:0}
+.sy-ordtoast .dot{flex:none;width:38px;height:38px;border-radius:50%;background:var(--accent-l);color:var(--accent-d);display:flex;align-items:center;justify-content:center;font-size:18px}
+.sy-ordtoast .txt{display:flex;flex-direction:column;min-width:0}
+.sy-ordtoast .txt b{font-size:15px}.sy-ordtoast .txt span{font-weight:600}.sy-ordtoast .txt small{color:var(--muted)}
+.sy-ordtoast .txt>*{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sy-ordtoast .x{flex:none;align-self:flex-start;background:none;border:0;font-size:22px;line-height:1;padding:8px 12px;color:var(--muted);cursor:pointer}
+.sy-ordtoast .x:hover{color:var(--ink)}
+@keyframes syslidein{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.sy-ordtoast{animation:none}.sy-ordtoast.out{transition:none}}
+.sy-testrow{display:flex;gap:8px;align-items:center;margin:4px 0 12px}.sy-testrow .sy-input{flex:1;min-width:0;margin:0}
 
-/* v15 - Place order lives INSIDE the order summary. Its footer (total + Place order) is pinned to the bottom of the screen while the summary is on screen, at any zoom, and rests at the bottom of the summary once you scroll to the end */
-.order-summary-box{padding:0;position:static;max-height:none;display:block;overflow:visible}
-.order-summary-box .sy-sumscroll{padding:22px 22px 10px}
-.order-summary-box .sy-sumfoot{position:sticky;bottom:0;z-index:20;padding:12px 22px 18px;background:#fff;border-top:1px solid var(--line);border-radius:0 0 var(--r) var(--r);box-shadow:0 -8px 16px rgba(15,23,42,.08)}
-.sy-sumfoot .total-cost-row{margin:0 0 4px;border:0;padding:0}.sy-sumfoot .order-number-text{margin:0 0 10px}
-.sy-sumfoot .proceed-checkout-btn{width:100%}.proceed-checkout-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-/* stacked layout (phones, 250%+ zoom) or a very short window: the summary footer becomes a bar fixed to the bottom of the screen */
-@media(max-width:900px),(max-height:519px){
-  .order-summary-box .sy-sumfoot{position:fixed;left:0;right:0;bottom:0;z-index:840;display:flex;align-items:center;gap:14px;border-radius:0;padding:10px clamp(14px,3vw,28px) calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 24px rgba(15,23,42,.14)}
-  .sy-sumfoot .total-cost-row{margin:0;flex:1 1 auto;min-width:0}.sy-sumfoot .order-number-text{display:none}
-  .sy-sumfoot .proceed-checkout-btn{width:auto;flex:0 1 320px;min-width:170px;padding:14px 22px}
-  body.cart-page{padding-bottom:92px}body.cart-page .support-btn{width:46px;height:46px;right:12px;bottom:100px}
-}
-
-/* ---- v17: delivery map, cash on delivery, receipts ---- */
-.sy-map{width:100%;height:clamp(220px,38vh,340px);border-radius:12px;border:1px solid var(--line,#d1d5db);overflow:hidden;isolation:isolate;background:#e5e7eb;margin:8px 0}
-.sy-map .leaflet-container{width:100%;height:100%;font:inherit}
-.sy-maprow{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 10px}
-.sy-more{margin:10px 0;border:1px dashed var(--line,#d1d5db);border-radius:10px;padding:8px 12px}
-.sy-more>summary{cursor:pointer;font-weight:700}
-.sy-more[open]>summary{margin-bottom:8px}
-.sy-more label{display:block;margin-top:8px;font-weight:600}
-@media print{.sy-map{display:none}}
-#del-card .sy-grid2{margin-bottom:6px}#del-card .sy-sub{margin:8px 0}#del-card .sy-switch{margin:12px 0}
+/* promos: header icon, hover list and the flash card that shrinks into the icon */
+.sy-promowrap{position:relative;display:inline-flex}.sy-promowrap[hidden]{display:none}
+.sy-promobtn.pulse{animation:syPromoPulse 1.1s ease-in-out 4}.sy-promobtn.pulse svg,.sy-promobtn.pulse .bi{animation:syWiggle .9s ease-in-out 4}
+.sy-promomenu{position:absolute;right:-6px;top:calc(100% + 10px);width:min(360px,calc(100vw - 24px));max-height:min(70vh,520px);overflow-y:auto;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px rgba(15,23,42,.28);padding:10px 12px 12px;z-index:800}
+.sy-promomenu[hidden]{display:none}.sy-promomenu::before{content:"";position:absolute;right:20px;top:-7px;width:12px;height:12px;background:#fff;border-left:1px solid var(--line);border-top:1px solid var(--line);transform:rotate(45deg)}
+.sy-pm-title{font-family:var(--head);font-size:19px;display:flex;gap:8px;align-items:center;margin:2px 0 6px}.sy-pm-h{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 6px}
+.sy-pm-row{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;color:inherit;text-decoration:none;background:#fff}.sy-pm-row:hover{border-color:var(--accent)}
+.sy-pm-row .pm-pct{flex:none;width:54px;text-align:center;font-family:var(--head);font-size:22px;line-height:1;color:var(--accent-d);background:var(--accent-l);border-radius:10px;padding:8px 0}.sy-pm-row .pm-pct small{display:block;font-size:10px;letter-spacing:.08em}
+.sy-pm-row .pm-body{flex:1;min-width:0;display:flex;flex-direction:column}.sy-pm-row .pm-body span,.sy-pm-row .pm-body small{font-size:12px;color:var(--muted)}.sy-pm-bundle img,.sy-pm-bundle .ph{flex:none;width:48px;height:48px;border-radius:10px;object-fit:cover;background:#eef1f6;display:grid;place-items:center}
+.sy-pm-all{display:block;text-align:center;font-weight:700;margin-top:4px}
+.sy-flash{position:fixed;top:calc(var(--nav-h) + 14px);left:50%;transform:translateX(-50%);z-index:900;width:min(560px,calc(100vw - 24px));display:grid;grid-template-columns:auto 1fr auto auto;gap:6px 14px;align-items:center;background:linear-gradient(135deg,#fff7ed,#fff);border:2px solid var(--accent);border-radius:16px;padding:14px 16px;box-shadow:0 16px 40px rgba(255,90,31,.32);animation:syFlashIn .55s cubic-bezier(.2,1.4,.4,1),syGlow 1.6s ease-in-out .6s infinite}
+.sy-flash .fl-ico{width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:24px;animation:syWiggle 1.2s ease-in-out .5s 3}.sy-flash .fl-txt{display:flex;flex-direction:column;min-width:0}.sy-flash .fl-txt b{font-family:var(--head);font-size:20px}.sy-flash .fl-txt em{font-style:normal;font-weight:800;background:#fff;border:1px dashed var(--accent);border-radius:6px;padding:0 6px;color:var(--accent-d)}
+.sy-flash .fl-x{background:none;border:0;font-size:18px;cursor:pointer;color:var(--muted);padding:6px}.sy-flash .fl-skip{grid-column:2 / -1;justify-self:start;background:none;border:0;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:0}
+@keyframes syFlashIn{from{opacity:0;transform:translateX(-50%) translateY(-24px) scale(.9)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes syGlow{0%,100%{box-shadow:0 16px 40px rgba(255,90,31,.28)}50%{box-shadow:0 16px 46px rgba(255,90,31,.6),0 0 0 6px rgba(255,90,31,.14)}}
+@keyframes syWiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-14deg)}40%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(5deg)}}
+@keyframes syPromoPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,90,31,.7)}50%{box-shadow:0 0 0 12px rgba(255,90,31,0)}}
+@media (max-width:560px){.sy-flash{grid-template-columns:auto 1fr auto}.sy-flash .fl-see{grid-column:2 / 3;justify-self:start}.sy-flash .fl-x{grid-row:1;grid-column:3}.sy-flash .fl-skip{grid-column:1 / -1}}
+@media (prefers-reduced-motion:reduce){.sy-flash,.sy-flash .fl-ico,.sy-promobtn.pulse,.sy-promobtn.pulse .bi{animation:none}}
+/* withdraw funds page */
+.sy-wallet{display:flex;flex-wrap:wrap;gap:22px 40px;align-items:center}.sy-wallet small{display:block;color:var(--muted);font-weight:600}.sy-bal{font-family:var(--head);font-size:40px;line-height:1.1}.sy-bal.small{font-size:24px}
+.sy-addacct{margin-top:10px}.sy-addacct summary{cursor:pointer;font-weight:700;color:var(--accent-d)}
+#wd-accounts .sy-payopt .sy-x{margin-left:auto}

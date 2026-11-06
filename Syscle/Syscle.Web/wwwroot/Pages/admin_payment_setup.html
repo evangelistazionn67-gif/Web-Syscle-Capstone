@@ -3,37 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Syscle - Payment Setup</title>
+    <title>Syscle - Payment methods</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
 </head>
 <body data-area="admin">
     
     <main class="sy-page">
-        <button class="back-btn" onclick="location.href='adminhomepage.html'"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</button><h1>Payment Setup</h1>
-        <div class="sy-card"><div class="sy-switch"><span>Cash (pay at pick-up)</span><button class="toggle-btn" data-code="cash" type="button">ON</button></div></div>
+        <button class="back-btn" onclick="location.href='adminhomepage.html'"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</button><h1>Payment methods</h1>
+        <div class="sy-card"><div class="sy-switch"><span>Cash (pay at pick-up or to the rider, and at the counter)</span><button class="toggle-btn" data-code="cash" type="button">ON</button></div></div>
         <div class="sy-card">
-            <div class="sy-switch"><span>GCash</span><button class="toggle-btn" data-code="gcash" type="button">ON</button></div>
-            <p class="sy-sub">Customers see this number at checkout, pay to it in their GCash app, and type the reference number from their receipt. You will see that reference on the order in Transactions History &ndash; check it in your GCash app before you press Complete.</p><label>GCash number</label><input class="sy-input" id="gcash-number" maxlength="60"><label>Account name</label><input class="sy-input" id="gcash-name" maxlength="80">
-        </div>
-
-        <div class="sy-card">
-            <div class="sy-switch"><span>PayMongo</span><button class="toggle-btn" data-code="paymongo" type="button">ON</button></div>
+            <div class="sy-switch"><span>Online payment (PayMongo): QR, GCash, Maya, card</span><button class="toggle-btn" data-code="paymongo" type="button">ON</button></div>
             <p class="sy-sub" id="st-paymongo">Checking...</p>
-        </div>
-        <div class="sy-card">
-            <div class="sy-switch"><span>PayPal</span><button class="toggle-btn" data-code="paypal" type="button">ON</button></div>
-            <p class="sy-sub" id="st-paypal">Checking...</p>
-        </div>
-
-        <div class="sy-card">
-            <h3>Payment QR Code</h3>
-            <div class="sy-switch" style="margin-bottom:15px;">
-                <span>Show QR Code to Customers</span>
-                <button class="toggle-btn" id="qr-toggle" type="button">OFF</button>
-            </div>
-            <label>Upload QR Image (.jpg/.png)</label>
-            <input type="file" id="qr-file" accept="image/*" class="sy-input">
-            <img id="qr-preview" class="sy-preview" style="display:none; max-height:150px; margin-top:10px;">
         </div>
 
         <button class="sy-btn" id="btn-apply" type="button">APPLY CHANGES</button>

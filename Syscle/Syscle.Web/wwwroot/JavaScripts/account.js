@@ -30,7 +30,7 @@
             if (input.id === 'disp-username') return toast('Usernames can\u2019t be changed.', true);
             if (input.id === 'disp-password') {
                 const cur = prompt('Enter your current password:'); if (cur === null) return;
-                const nxt = prompt('Enter a new password (8 to 14 characters):'); if (nxt === null) return;
+                const nxt = prompt('Enter a new password (8 to 64 characters):'); if (nxt === null) return;
                 try { await api('/api/me/password', 'POST', { current: cur, next: nxt }); toast('Password changed.'); } catch (e) { toast(e.message, true); }
                 return;
             }

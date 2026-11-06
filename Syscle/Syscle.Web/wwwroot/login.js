@@ -44,9 +44,11 @@ on('btn-register', async () => {
     const username = val('reg-username').trim(), email = val('reg-email').trim(), password = val('reg-password');
     if (!username || !email || !password) return alert('Please fill in all fields.');
     if (!/^[A-Za-z0-9_.-]{3,14}$/.test(username)) return alert('Username must be 3 to 14 letters, numbers, dots, dashes or underscores.');
-    if (password.length < 8 || password.length > 14) return alert('Password must be 8 to 14 characters.');
+    if (password.length < 8 || password.length > 64) return alert('Password must be 8 to 64 characters.');
     if (password !== val('reg-confirm')) return alert('Passwords do not match.');
-    const { ok, data } = await post('/api/auth/register', { username, email, password });
+    const phone = val('reg-phone').trim();
+    if (phone && !/^(\+?63|0)9\d{9}$/.test(phone.replace(/[\s-]/g, ''))) return alert('Enter a mobile number like 09171234567, or leave it empty.');
+    const { ok, data } = await post('/api/auth/register', { username, email, password, phone: phone || null });
     if (!ok) return alert(data.error || 'Could not create the account.');
     alert('Account created. You can log in now.'); show('login');
 });
@@ -73,7 +75,7 @@ on('btn-sms-send', async () => {
 on('btn-sms-reset', async () => {
     const code = val('sms-code').trim(), password = val('sms-new');
     if (!/^\d{6}$/.test(code)) return alert('Enter the 6-digit code.');
-    if (password.length < 8 || password.length > 14) return alert('Password must be 8 to 14 characters.');
+    if (password.length < 8 || password.length > 64) return alert('Password must be 8 to 64 characters.');
     if (password !== val('sms-confirm')) return alert('Passwords do not match.');
     const { ok, data } = await post('/api/auth/reset-sms', { ticket: smsTicket, code, password });
     if (!ok) return alert(data.error || 'Could not change the password.');

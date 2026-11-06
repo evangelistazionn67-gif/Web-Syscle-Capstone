@@ -5,7 +5,7 @@ if (!token) { alert('This page needs the link from your reset email. Please requ
 $('btn-save-password').addEventListener('click', async e => {
     e.preventDefault();
     const password = $('new-password').value;
-    if (password.length < 8 || password.length > 14) return alert('Password must be 8 to 14 characters.');
+    if (password.length < 8 || password.length > 64) return alert('Password must be 8 to 64 characters.');
     if (password !== $('new-confirm').value) return alert('Passwords do not match.');
     const r = await fetch('/api/auth/reset', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'syscle' }, body: JSON.stringify({ token, password }) });
     let data = {}; try { data = await r.json(); } catch (err) { }

@@ -68,7 +68,7 @@
       <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
         <select class="sy-input" style="margin:0; flex:1;" onchange="updateVariantName(${i}, this.value); renderVariants()"><option value="">— Pick color —</option>${[...new Set([...COLORS, ...(v.ColorName ? [v.ColorName] : [])])].map(c => `<option${c === v.ColorName ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
         <input type="file" class="sy-input" style="margin:0; width:150px;" accept="image/*" onchange="updateVariantFile(${i}, this)">
-        ${v.ImagePath ? `<img src="${v.ImagePath}" style="height:30px; width:30px; object-fit:cover;">` : ''}
+        ${v.ImagePath ? `<img src="${esc(v.ImagePath)}" alt="" style="height:30px; width:30px; object-fit:cover;">` : ''}
         <button type="button" class="sy-x" onclick="removeVariant(${i})">X</button>
       </div>
     `).join('');

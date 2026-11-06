@@ -27,10 +27,14 @@
                   <label class="sy-check-line"><input type="radio" name="pc-limit" value="unlimited" checked> Unlimited</label>
                   <label class="sy-check-line"><input type="radio" name="pc-limit" value="limited"> Limited</label>
                   <input id="pc-max" class="sy-input" type="number" min="1" max="100000" placeholder="How many times?" style="width:150px" hidden></fieldset>
+                <fieldset class="sy-limit" aria-label="How many times one customer can use it"><legend>Uses per customer</legend>
+                  <label class="sy-check-line"><input type="radio" name="pc-plimit" value="limited" checked> Limited to</label>
+                  <input id="pc-pu" class="sy-input" type="number" min="1" max="1000" value="1" style="width:90px" aria-label="Times each customer can use the code">
+                  <label class="sy-check-line"><input type="radio" name="pc-plimit" value="unlimited"> Unlimited</label></fieldset>
                 <label class="sy-check-line"><input type="checkbox" id="pc-public"> Show in the customer pop-up</label>
                 <button class="sy-btn" id="pc-add" type="button">Add Code</button>
             </div>
-            <p class="sy-sub" style="margin:8px 0 0">Choose Unlimited or Limited first; a Limited code asks for the number of uses. Leave the dates empty for a code with no end date. A seasonal code only works while its season is live (seasons and their dates are set in Lists and rules).</p>
+            <p class="sy-sub" style="margin:8px 0 0"><b>Usage</b> is the total for everyone; <b>Uses per customer</b> is how many times one customer can use the code (the default is once each; a customer who has used it up no longer sees it in their promo list). A Limited code asks for the number of uses. Leave the dates empty for a code with no end date. A seasonal code only works while its season is live (seasons and their dates are set in Lists and rules).</p>
         </div>
 
         <div class="sy-card"><h3>Frequent buyers</h3><p class="sy-sub" style="margin-bottom:8px">Your most loyal customers. Create a code for them, then message them from Customer Messages.</p><div id="top-buyers"><div class="sy-empty">Loading...</div></div></div>

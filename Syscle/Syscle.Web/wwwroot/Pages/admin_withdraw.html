@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syscle - Withdraw funds</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="../Styles/ui.css">
+</head>
+<body data-area="admin">
+
+    <main class="sy-page">
+        <button class="back-btn" onclick="location.href='adminhomepage.html'"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</button><h1>Withdraw funds</h1>
+        <p class="sy-sub">Online payments collect in your PayMongo wallet. Send the money to your own GCash account from here. Every withdrawal needs the 6-digit code from your authenticator app, the same one you use to sign in.</p>
+
+        <div class="sy-card" id="wd-balance"><div class="sy-empty">Loading the wallet...</div></div>
+        <div class="sy-banner warn" id="wd-2fa" hidden>Withdrawals need two-factor authentication. <a href="account.html">Turn it on in My account &gt; Security</a>, then come back.</div>
+
+        <div class="sy-card">
+            <h3>GCash accounts</h3>
+            <p class="sy-sub" style="margin-bottom:8px">Pick the account the money goes to. The name must match the name on the GCash account exactly, or the transfer fails.</p>
+            <div id="wd-accounts"><div class="sy-empty">Loading...</div></div>
+            <details class="sy-addacct"><summary>Add a GCash account</summary>
+                <div class="sy-testrow" style="flex-wrap:wrap">
+                    <input id="wa-name" class="sy-input" maxlength="80" placeholder="Name on the GCash account" aria-label="Name on the GCash account">
+                    <input id="wa-number" class="sy-input" type="tel" maxlength="14" placeholder="GCash number, 09171234567" aria-label="GCash mobile number">
+                    <input id="wa-code" class="sy-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="2FA code" style="max-width:130px" aria-label="Authenticator code">
+                    <button class="sy-btn small" id="wa-add" type="button">Add account</button>
+                </div>
+            </details>
+        </div>
+
+        <div class="sy-card">
+            <h3>Withdraw</h3>
+            <div class="sy-testrow" style="flex-wrap:wrap">
+                <input id="wd-amount" class="sy-input" type="number" min="1" step="0.01" placeholder="Amount in pesos" style="max-width:200px" aria-label="Amount to withdraw">
+                <input id="wd-code" class="sy-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="2FA code" style="max-width:130px" aria-label="Authenticator code">
+                <button class="sy-btn" id="wd-go" type="button">Withdraw</button>
+                <button class="sy-btn ghost small" id="wd-all" type="button">Use the whole balance</button>
+            </div>
+            <p class="sy-sub" id="wd-limits" style="margin:6px 0 0"></p>
+        </div>
+
+        <div class="sy-card"><h3>History</h3><div class="sy-scroll"><table class="sy-table"><thead><tr><th>DATE</th><th>REFERENCE</th><th>TO</th><th>AMOUNT</th><th>STATUS</th></tr></thead><tbody id="wd-history"><tr><td colspan="5" class="sy-empty">Loading...</td></tr></tbody></table></div></div>
+    </main>
+    <script src="../JavaScripts/shell.js"></script><script src="../JavaScripts/api.js"></script>
+    <script src="../JavaScripts/admin_withdraw.js"></script>
+    <script src="../JavaScripts/support.js"></script>
+</body>
+</html>

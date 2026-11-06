@@ -2,7 +2,6 @@
 -- ============================ starter data ============================
 -- Store rules (all editable in Admin > Settings; nothing below is hard-coded in the program)
 INSERT IGNORE INTO Settings (SettingKey, SettingValue) VALUES
-  ('ShowPaymentQr','0'), ('PaymentQrImage',''),
   ('StoreName','Web-Syscle'), ('StoreTagline','Shop & Customize'), ('DeliveryFee','100'),
   ('LowStockThreshold','5'), ('MaxFeatured','12'),
   ('AdminIdleSeconds','300'),
@@ -11,8 +10,8 @@ INSERT IGNORE INTO Settings (SettingKey, SettingValue) VALUES
   ('PromoPopup','1');
 
 INSERT IGNORE INTO PaymentMethods (MethodCode, Label, IsOn) VALUES
-  ('cash','Cash',1), ('gcash','GCash',1),
-  ('paymongo','PayMongo',1), ('paypal','PayPal (online)',0);
+  ('cash','Cash',1),
+  ('paymongo','QR, GCash, Maya or card (online)',1), ('paypal','PayPal (online)',1);
 
 -- Seasons (Philippine calendar). Edit the dates in Admin > Dropdown lists.
 INSERT IGNORE INTO Seasons (Name, Kind, StartMD, EndMD) VALUES

@@ -34,7 +34,8 @@
     ['Messages', 'admin_messages.html', 'chat-dots', 'msg'],
     ['Accounts', 'admin_account_management.html', 'people'],
     ['Setup'],
-    ['Payment setup', 'admin_payment_setup.html', 'credit-card'],
+    ['Payment methods', 'admin_payment_setup.html', 'credit-card'],
+    ['Withdraw funds', 'admin_withdraw.html', 'bank'],
     ['Lists and rules', 'admin_lists.html', 'sliders'],
     ['Preview store', 'admin_preview.html', 'eye'],
     ['Settings', 'settings.html', 'gear']
@@ -105,6 +106,7 @@
       <nav class="sy-links-nav" id="sy-links" aria-label="Main">${links}</nav>
       ${B.dataset.search ? searchHtml(B.dataset.search) : ''}
       <div class="sy-tools">${me ? bellHtml : ''}
+        <div class="sy-promowrap" id="sy-promowrap" hidden><button class="sy-ibtn sy-promobtn" id="sy-promobtn" type="button" aria-label="Promos for you" aria-haspopup="true" aria-expanded="false">${bi('gift')}<span class="sy-badge" id="sy-promocount"></span></button><div class="sy-promomenu" id="sy-promomenu" role="region" aria-label="Your promos" hidden></div></div>
         <a class="sy-ibtn" href="${me ? '/Pages/cart.html' : '/login.html?next=' + encodeURIComponent('/Pages/cart.html')}" aria-label="Cart">${bi('cart3')}</a>
         ${me ? accountMenu(me, admin) : `<div class="sy-guestbtns">${backToAdmin}<a class="sy-btn ghost small" href="/login.html">Log in</a><a class="sy-btn accent small" href="/login.html?signup=1">Sign up</a></div>`}
         <button class="sy-ibtn sy-burger" id="sy-burger" aria-label="Menu">${bi('list')}</button></div></div>`;
@@ -162,7 +164,7 @@
     const touch = () => {
       if (done) return; const now = Date.now(); last = now;
       if (warnOn) { warnOn = false; box.hidden = true; }
-      if (now - pinged > pingGap) { pinged = now; fetch('/api/auth/activity', { method: 'POST', keepalive: true, headers: { 'X-Requested-With': 'syscle', 'X-Area': 'admin' } }).catch(() => { }); }
+      if (now - pinged > pingGap) { pinged = now; fetch('/api/auth/activity', { method: 'POST', headers: { 'X-Requested-With': 'syscle', 'X-Area': 'admin' } }).catch(() => { }); }
     };
     ['pointerdown', 'keydown', 'scroll', 'touchstart', 'wheel'].forEach(ev => window.addEventListener(ev, touch, { passive: true, capture: true }));
     const leave = async () => {
@@ -183,54 +185,75 @@
     t.textContent = fmt(seconds);
   }
 
-  /* ---------- promo pop-up: tells visitors about live codes and bundles. It appears at random moments while they browse
-     (never on the cart or payment page, never on top of another dialog, at most 4 times per visit, and it can be silenced for the day) ---------- */
+  /* ---------- promos: a flash card that shrinks into a gift icon beside the cart; hovering the icon lists the customer's promos ---------- */
   async function promoPopup() {
+    const wrap = document.getElementById('sy-promowrap'); if (!wrap) return;
     const p = location.pathname.toLowerCase();
-    if (/\/(cart|pay_sandbox)\.html$/.test(p)) return;
     const preview = /[?&]preview=1/.test(location.search);   // the admin "view as customer" frame shows it quickly
-    if (!preview && (lsGet('sy.popup.hide') || '') === new Date().toDateString()) return;
-    const d = await get('/api/promotions'); if (!d || !d.popup) return;
+    const d = await get('/api/promotions'); if (!d) return;
     const codes = d.codes || [], bundles = d.bundles || []; if (!codes.length && !bundles.length) return;
-    const MAX = 4, rnd = (a, b) => (a + Math.random() * (b - a)) * 1000;
-    const schedule = ms => setTimeout(tick, ms);
-    function tick() {
-      if ((lsGet('sy.popup.hide') || '') === new Date().toDateString() && !preview) return;
-      const n = +ssGet('sy.popup.n') || 0; if (n >= MAX) return;
-      if (document.hidden || document.querySelector('.sy-ov')) return schedule(15000);   // wait until the visitor is looking and no dialog is open
-      ssSet('sy.popup.n', String(n + 1));
-      // a random mix: sometimes the codes, sometimes the bundle deals, sometimes both
-      const roll = Math.random(); let c = codes, b = bundles;
-      if (codes.length && bundles.length && n > 0) { if (roll < 0.4) b = []; else if (roll < 0.7) c = []; }
-      showPromo(c, b, () => schedule(rnd(60, 180)));
-    }
-    schedule(preview ? 800 : (ssGet('sy.popup.n') ? rnd(40, 120) : rnd(6, 25)));
+    paintPromoMenu(wrap, codes, bundles);
+    if (/\/cart\.html$/.test(p) || !d.popup) return;   // no flash on the cart page, and none when the admin switched the pop-up off (the icon stays)
+    if (!preview && (lsGet('sy.popup.hide') || '') === new Date().toDateString()) return;
+    const last = +ssGet('sy.promo.flash') || 0; if (!preview && Date.now() - last < 10 * 60 * 1000) return;   // once per visit, again after 10 minutes of browsing
+    ssSet('sy.promo.flash', String(Date.now()));
+    setTimeout(() => { if (!document.hidden) flashPromo(wrap, codes, bundles); }, preview ? 600 : 1500);
   }
-  function showPromo(codes, bundles, onClose) {
+  function promoItems(codes, bundles) {
     const claimed = lsGet('sy.claim') || {};
-    const codeCard = c => `<div class="sy-pcode"><div class="pc-pct">${c.percent}%<small>OFF</small></div><div class="pc-body"><b>${e(c.code)}</b>
-        <span>${c.season ? e(c.season) + ' &middot; ' : ''}${c.endsAt ? 'until ' + e(c.endsAt) : 'no end date'}${c.left != null ? ' &middot; ' + c.left + ' left' : ''}</span></div>
-        <button type="button" class="sy-btn accent small" data-claim="${e(c.code)}" data-pct="${c.percent}">${claimed.code === c.code ? 'Saved' : 'Claim'}</button></div>`;
-    const bundleCard = b => `<a class="sy-pbundle" href="/Pages/homepage.html#bundles">${b.image ? `<img src="${e(b.image)}" alt="" loading="lazy">` : (b.items && b.items[0] && b.items[0].image ? `<img src="${e(b.items[0].image)}" alt="" loading="lazy">` : `<span class="ph">${bi('box-seam')}</span>`)}
-        <span><b>${e(b.name)}</b><small>Save ${b.discountPercent}% &middot; now ${fmtP(b.price)}</small></span></a>`;
-    const ov = document.createElement('div'); ov.className = 'sy-ov sy-promo'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'sy-promo-h');
-    ov.innerHTML = `<div class="sy-ovbox sy-promobox"><button class="sy-ovx" type="button" aria-label="Close">${bi('x-lg')}</button>
-      <div class="sy-promo-head">${bi('gift')}<div><h2 id="sy-promo-h">${codes.length ? 'You have a discount waiting' : 'Bundle deals for you'}</h2><p>${codes.length ? 'Claim a code now. It is filled in for you at checkout.' : 'Buy together and save.'}</p></div></div>
-      ${codes.length ? `<div class="sy-pcodes">${codes.map(codeCard).join('')}</div>` : ''}
-      ${bundles.length ? `<h3 class="sy-promo-sub">${bi('box-seam')} Bundle deals</h3><div class="sy-pbundles">${bundles.map(bundleCard).join('')}</div>` : ''}
-      <label class="sy-promo-skip"><input type="checkbox" id="sy-promo-skip"> Do not show this again today</label>
-      <div class="sy-modal-actions"><a class="sy-btn ghost" href="/Pages/homepage.html#bundles">See all deals</a><button type="button" class="sy-btn accent" id="sy-promo-go">Start shopping</button></div></div>`;
-    let closed = false; const close = () => { if (closed) return; closed = true; if (document.getElementById('sy-promo-skip').checked) lsSet('sy.popup.hide', new Date().toDateString()); ov.remove(); if (onClose) onClose(); };
-    ov.addEventListener('click', ev => { if (ev.target === ov) close(); });
-    ov.querySelector('.sy-ovx').addEventListener('click', close);
-    ov.querySelector('#sy-promo-go').addEventListener('click', () => { close(); const s = document.getElementById('shop') || document.querySelector('.sy-products'); if (s) s.scrollIntoView({ behavior: 'smooth' }); });
-    ov.addEventListener('keydown', ev => { if (ev.key === 'Escape') close(); });
-    ov.querySelectorAll('[data-claim]').forEach(btn => btn.addEventListener('click', () => {
-      lsSet('sy.claim', { code: btn.dataset.claim, percent: +btn.dataset.pct, at: Date.now() });
-      ov.querySelectorAll('[data-claim]').forEach(x => x.textContent = x === btn ? 'Saved' : 'Claim');
-      if (window.toast) window.toast('Code ' + btn.dataset.claim + ' saved. It will be applied at checkout.', false, window.SY_ME ? 'View cart' : 'Log in', window.SY_ME ? '/Pages/cart.html' : '/login.html?next=' + encodeURIComponent('/Pages/cart.html'));
-    }));
-    document.body.appendChild(ov); const first = ov.querySelector('[data-claim],#sy-promo-go'); if (first) first.focus();
+    const codeRow = c => `<div class="sy-pm-row"><div class="pm-pct">${c.percent}%<small>OFF</small></div><div class="pm-body"><b>${e(c.code)}</b>
+        <span>${c.season ? e(c.season) + ' &middot; ' : ''}${c.endsAt ? 'until ' + e(c.endsAt) : 'no end date'}</span>
+        <small>${c.perUser == null ? 'Use it as often as you like' : (c.myLeft === 1 ? 'You can use it 1 more time' : 'You can use it ' + c.myLeft + ' more times')}${c.left != null ? ' &middot; ' + c.left + ' left in total' : ''}</small></div>
+        <button type="button" class="sy-btn accent small" data-claim="${e(c.code)}" data-pct="${c.percent}">${claimed.code === c.code ? 'Saved' : 'Use'}</button></div>`;
+    const bundleRow = b => `<a class="sy-pm-row sy-pm-bundle" href="/Pages/homepage.html#bundles">${b.image ? `<img src="${e(b.image)}" alt="" loading="lazy">` : (b.items && b.items[0] && b.items[0].image ? `<img src="${e(b.items[0].image)}" alt="" loading="lazy">` : `<span class="ph">${bi('box-seam')}</span>`)}
+        <div class="pm-body"><b>${e(b.name)}</b><small>Save ${b.discountPercent}% &middot; now ${fmtP(b.price)}</small></div></a>`;
+    return (codes.length ? `<div class="sy-pm-h">Discount codes</div>${codes.map(codeRow).join('')}` : '') + (bundles.length ? `<div class="sy-pm-h">Bundle deals</div>${bundles.map(bundleRow).join('')}` : '');
+  }
+  function paintPromoMenu(wrap, codes, bundles) {
+    const btn = wrap.querySelector('#sy-promobtn'), menu = wrap.querySelector('#sy-promomenu'), count = wrap.querySelector('#sy-promocount');
+    count.textContent = String(codes.length + bundles.length); count.classList.add('show');
+    menu.innerHTML = `<div class="sy-pm-title">${bi('gift')} Your promos</div>${promoItems(codes, bundles)}<a class="sy-pm-all" href="/Pages/homepage.html#bundles">See all deals</a>`;
+    wrap.hidden = false;
+    let t = 0;
+    const open = () => { clearTimeout(t); menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+    const close = () => { clearTimeout(t); t = setTimeout(() => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }, 220); };
+    wrap.addEventListener('mouseenter', open); wrap.addEventListener('mouseleave', close);        // computer: hover
+    btn.addEventListener('click', () => menu.hidden ? open() : (menu.hidden = true, btn.setAttribute('aria-expanded', 'false')));   // phone / keyboard: tap
+    wrap.addEventListener('focusin', open); wrap.addEventListener('focusout', ev => { if (!wrap.contains(ev.relatedTarget)) close(); });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); } });
+    document.addEventListener('click', ev => { if (!wrap.contains(ev.target)) { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); } });
+    menu.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-claim]'); if (!b) return;
+      lsSet('sy.claim', { code: b.dataset.claim, percent: +b.dataset.pct, at: Date.now() });
+      menu.querySelectorAll('[data-claim]').forEach(x => x.textContent = x === b ? 'Saved' : 'Use');
+      if (window.toast) window.toast('Code ' + b.dataset.claim + ' saved. It will be applied at checkout.', false, window.SY_ME ? 'View cart' : 'Log in', window.SY_ME ? '/Pages/cart.html' : '/login.html?next=' + encodeURIComponent('/Pages/cart.html'));
+    });
+  }
+  // the eye-catching part: a glowing card appears, waits a few seconds, then shrinks into the icon beside the cart
+  function flashPromo(wrap, codes, bundles) {
+    if (document.querySelector('.sy-flash')) return;
+    const best = codes.slice().sort((a, b) => b.percent - a.percent)[0], n = codes.length + bundles.length;
+    const card = document.createElement('div'); card.className = 'sy-flash'; card.setAttribute('role', 'status'); card.setAttribute('aria-live', 'polite');
+    card.innerHTML = `<div class="fl-ico">${bi('gift')}</div><div class="fl-txt"><b>${n === 1 ? '1 promo is waiting for you' : n + ' promos are waiting for you'}</b>
+      <span>${best ? 'Use code <em>' + e(best.code) + '</em> and get ' + best.percent + '% off' : 'Bundle deals: buy together and save'}</span></div>
+      <button type="button" class="fl-see sy-btn accent small">See promos</button><button type="button" class="fl-x" aria-label="Minimize">${bi('x-lg')}</button>
+      <button type="button" class="fl-skip">Hide for today</button>`;
+    document.body.appendChild(card);
+    let done = false, timer = 0;
+    const minimize = () => {
+      if (done) return; done = true; clearTimeout(timer);
+      const btn = document.getElementById('sy-promobtn'); if (!btn || card.animate === undefined || matchMedia('(prefers-reduced-motion: reduce)').matches) { card.remove(); return; }
+      const a = card.getBoundingClientRect(), b = btn.getBoundingClientRect();
+      const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
+      const anim = card.animate([{ transform: 'translateX(-50%) scale(1)', opacity: 1 }, { transform: `translate(calc(-50% + ${dx}px), ${dy}px) scale(.05)`, opacity: .15 }], { duration: 700, easing: 'cubic-bezier(.6,-.15,.7,1)', fill: 'forwards' });
+      anim.onfinish = () => { card.remove(); btn.classList.add('pulse'); setTimeout(() => btn.classList.remove('pulse'), 4200); };
+    };
+    const arm = ms => { clearTimeout(timer); timer = setTimeout(minimize, ms); };
+    card.addEventListener('mouseenter', () => clearTimeout(timer)); card.addEventListener('mouseleave', () => arm(2500));
+    card.querySelector('.fl-x').addEventListener('click', minimize);
+    card.querySelector('.fl-skip').addEventListener('click', () => { lsSet('sy.popup.hide', new Date().toDateString()); minimize(); });
+    card.querySelector('.fl-see').addEventListener('click', () => { minimize(); setTimeout(() => { const btn = document.getElementById('sy-promobtn'); if (btn) btn.click(); }, 750); });
+    arm(7500);
   }
 
   /* ---------- notification bell ---------- */
@@ -282,6 +305,47 @@
     }
     const tick = admin ? tickAdmin : tickCustomer; tick(); setInterval(() => { if (!document.hidden) tick(); }, admin ? 30000 : 20000);
     window.syRefreshBell = tick;
+    if (admin) startOrderAlerts();
+  }
+
+  /* ---------- admin: a pop-up card for every new online order ---------- */
+  function startOrderAlerts() {
+    const KEY = 'sy.adm.lastOrder';   // newest order number already announced; shared by every open admin page, so changing page or opening a second tab does not repeat a card
+    let box = null, busy = false, mem = 0;
+    function holder() {
+      if (box && box.isConnected) return box;
+      box = document.createElement('div'); box.className = 'sy-ordtoasts'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box); return box;
+    }
+    function pop(title, line1, line2) {
+      const h = holder(); while (h.children.length >= 3) h.firstElementChild.remove();   // never more than 3 cards on screen
+      const card = document.createElement('div'); card.className = 'sy-ordtoast';
+      card.innerHTML = `<a class="body" href="/Pages/admin_transaction_history.html"><div class="dot">${bi('bag-check')}</div><div class="txt"><b>${e(title)}</b><span>${e(line1)}</span><small>${e(line2)}</small></div></a><button type="button" class="x" aria-label="Dismiss">&times;</button>`;
+      let timer = 0;
+      const close = () => { clearTimeout(timer); card.classList.add('out'); setTimeout(() => card.remove(), 260); };
+      const arm = ms => { clearTimeout(timer); timer = setTimeout(close, ms); };
+      card.querySelector('.x').addEventListener('click', close);
+      card.addEventListener('mouseenter', () => clearTimeout(timer));   // reading it? it stays
+      card.addEventListener('mouseleave', () => arm(3000));
+      card.addEventListener('focusin', () => clearTimeout(timer));
+      card.addEventListener('focusout', () => arm(3000));
+      h.appendChild(card); arm(9000);
+    }
+    async function check() {
+      if (busy || document.hidden) return; busy = true;
+      try {
+        const last = Number(lsGet(KEY)) || mem;
+        const r = await get('/api/admin/orders/new-since?after=' + last); if (!r) return;
+        mem = r.maxId; lsSet(KEY, r.maxId);   // saved before showing anything, so a second open tab does not show the same orders again
+        if (!last) return;                    // very first visit: only set the starting point, old orders are not announced
+        const list = r.orders || []; if (!list.length) return;
+        if (r.count > 3) pop(r.count + ' new orders', 'Customers just checked out.', 'Open Transactions to see them.');
+        else list.forEach((o, i) => setTimeout(() => pop('New order ' + o.code, o.customer + ' · ' + fmtP(o.total), o.items + ' item' + (Number(o.items) === 1 ? '' : 's') + ' · ' + o.method + ' · ' + o.fulfillment), i * 400));
+        if (window.syRefreshBell) window.syRefreshBell();   // the bell and the sidebar counters update straight away
+      } finally { busy = false; }
+    }
+    check(); setInterval(check, 10000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });   // catch up as soon as the admin comes back to the tab
   }
 })();
 

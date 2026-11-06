@@ -66,9 +66,7 @@
   try {
     const fe = items.filter(p => p.featured && p.stock > 0).slice(0, 8);
     if (fe.length) { const fb = document.getElementById('featured-products'); fb.innerHTML = fe.map(productCard).join(''); document.getElementById('featured').hidden = false; bindProductCards(fb, () => items); }
-    const pr = await api('/api/promotions'), strip = document.getElementById('promo-strip');
-    if (strip && pr.codes.length) strip.innerHTML = pr.codes.map(c => `<div class="sy-banner info"><b>${esc(c.season)} promo:</b> use code <b>${esc(c.code)}</b> for ${c.percent}% off${c.endsAt ? ' until ' + esc(new Date(c.endsAt + 'T00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })) : ''}.</div>`).join('');
-  } catch (e) { /* featured and promos are optional */ }
+  } catch (e) { /* featured products are optional */ }
   initHeader(t => { q = t; renderCats(); renderShelf(); });
   if (location.hash === '#bundles') setTimeout(() => { const b = document.getElementById('bundles'); if (b && !b.hidden) b.scrollIntoView(); }, 300);
   bindProductCards(shelf, () => items);

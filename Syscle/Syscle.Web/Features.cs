@@ -12,7 +12,7 @@ record PayConfirmReq(string? Ref);
 record LookupReq(string? Kind, string? Value, string? Extra);
 record SeasonNewReq(string? Name, string? Kind, string? StartMD, string? EndMD);
 record SeasonEditReq(bool? IsOn, string? StartMD, string? EndMD);
-class PubPromo { public string Code { get; set; } = ""; public int Percent { get; set; } public string? Season { get; set; } public DateTime? EndsAt { get; set; } public int? MaxUses { get; set; } public int Used { get; set; } }
+class PubPromo { public string Code { get; set; } = ""; public int Percent { get; set; } public string? Season { get; set; } public DateTime? EndsAt { get; set; } public int? MaxUses { get; set; } public int Used { get; set; } public int? MaxPerUser { get; set; } public int Mine { get; set; } }
 class PayMethodRow { public string Code { get; set; } = ""; public string Label { get; set; } = ""; public string? AccountNumber { get; set; } public string? AccountName { get; set; } }
 class RefundOrder
 {
@@ -48,12 +48,14 @@ static class Features
         });
 
         // ---------- public: popup data (promo codes + live bundles) ----------
-        app.MapGet("/api/promotions", async (Db db) =>
+        app.MapGet("/api/promotions", async (Db db, ClaimsPrincipal u) =>
         {
             using var c = db.Open(); var today = Promos.Today; var states = await Seasons.StatesAsync(c);
-            var rows = (await c.QueryAsync<PubPromo>("SELECT Code, DiscountPercent AS Percent, Season, EndsAt, MaxUses, (SELECT COUNT(*) FROM Orders o WHERE o.PromoCode=PromoCodes.Code AND o.Status<>'Cancelled') AS Used FROM PromoCodes WHERE IsActive=1 AND IsPublic=1 AND (StartsAt IS NULL OR StartsAt<=@today) AND (EndsAt IS NULL OR EndsAt>=@today) ORDER BY DiscountPercent DESC", new { today })).ToList();
-            var codes = rows.Where(p => (p.MaxUses == null || p.Used < p.MaxUses) && Seasons.Check(states, p.Season).live)
-                .Select(p => new { code = p.Code, percent = p.Percent, season = p.Season, endsAt = p.EndsAt?.ToString("yyyy-MM-dd"), left = p.MaxUses == null ? (int?)null : p.MaxUses - p.Used }).ToList();
+            // a signed-in customer only sees the codes they can still use (a code limited to one use per customer disappears once used)
+            int? uid = u.Identity?.IsAuthenticated == true && u.IsInRole("Customer") ? Uid(u) : null;
+            var rows = (await c.QueryAsync<PubPromo>("SELECT Code, DiscountPercent AS Percent, Season, EndsAt, MaxUses, MaxPerUser, (SELECT COUNT(*) FROM Orders o WHERE o.PromoCode=PromoCodes.Code AND o.Status<>'Cancelled') AS Used, (SELECT COUNT(*) FROM Orders o2 WHERE o2.PromoCode=PromoCodes.Code AND o2.UserId=@uid AND o2.Status<>'Cancelled') AS Mine FROM PromoCodes WHERE IsActive=1 AND IsPublic=1 AND (StartsAt IS NULL OR StartsAt<=@today) AND (EndsAt IS NULL OR EndsAt>=@today) ORDER BY DiscountPercent DESC", new { today, uid })).ToList();
+            var codes = rows.Where(p => (p.MaxUses == null || p.Used < p.MaxUses) && (p.MaxPerUser == null || p.Mine < p.MaxPerUser) && Seasons.Check(states, p.Season).live)
+                .Select(p => new { code = p.Code, percent = p.Percent, season = p.Season, endsAt = p.EndsAt?.ToString("yyyy-MM-dd"), left = p.MaxUses == null ? (int?)null : p.MaxUses - p.Used, perUser = p.MaxPerUser, myLeft = p.MaxPerUser == null ? (int?)null : p.MaxPerUser - p.Mine }).ToList();
             var bundles = (await Bundles.ListAsync(c, true)).Take(4).ToList();
             return Results.Ok(new { popup = await Cfg.GetAsync(c, "PromoPopup") == "1", codes, bundles });
         });
@@ -99,19 +101,10 @@ static class Features
             if (o.Status == "Cancelled") return Conflict("This order was already cancelled.");
             if (o.RefundStatus != "None") return Conflict(o.RefundStatus == "Refunded" ? "This order was already refunded." : o.RefundStatus == "Requested" ? "You already asked for a refund. The store will answer soon." : "Your refund request was declined. Please message the store.");
             var days = await Cfg.IntAsync(c, "RefundWindowDays", 0, 90);
-            if (o.Status == "Completed" && o.CompletedAt != null && (DateTime.Now - o.CompletedAt.Value).TotalDays > days) return Conflict($"Refunds can be asked within {days} days after the order is completed.");
+            if (o.Status == "Completed" && o.CompletedAt != null && (Promos.Now - o.CompletedAt.Value).TotalDays > days) return Conflict($"Refunds can be asked within {days} days after the order is completed.");
             await c.ExecuteAsync("UPDATE Orders SET RefundReason=@reason, RefundAmount=Total, RefundRequestedAt=NOW(), RefundStatus='Requested' WHERE OrderId=@id", new { reason, id }, tx);
             await Audit.AddAsync(c, u.Identity?.Name, "Refund requested", "Order " + id, tx);
             tx.Commit(); return Results.Ok(new { ok = true });
-        });
-
-        // ---------- test mode: stands in for PayMongo / PayPal while no real keys are set ----------
-        shop.MapPost("/orders/{id:int}/sandbox-pay", async (int id, ClaimsPrincipal u, Db db, IConfiguration cfg) =>
-        {
-            if (!cfg.GetValue("Payments:TestMode", false)) return Results.NotFound(new { error = "Not found." });
-            using var c = db.Open();
-            var n = await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE OrderId=@id AND UserId=@uid AND PaymentRef LIKE 'test\\_%' AND PaymentStatus<>'Paid' AND Status NOT IN ('Cancelled','Completed')", new { id, uid = Uid(u) });
-            return n == 0 ? Conflict("This order cannot be paid in test mode.") : Results.Ok(new { ok = true });
         });
 
         // ---------- admin: confirm the items first, then the money ----------
@@ -148,8 +141,6 @@ static class Features
                 CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS Code FROM Orders o LEFT JOIN Users u ON u.UserId=o.UserId WHERE o.OrderId=@id FOR UPDATE", new { id }, tx);
             if (o is null) return Results.NotFound(new { error = "Not found." });
             if (o.RefundStatus != "Requested") return Conflict("There is no open refund request for this order.");
-            if (r.Approve && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE OrderId=@id AND LalamoveStatus IN ('BOOKING','ASSIGNING_DRIVER','ON_GOING','PICKED_UP','MANUAL')", new { id }, tx) > 0)
-                return Conflict("A Lalamove rider is booked for this order. Cancel the booking first (Delivery button on the order), then approve the refund.");
             var note = Nz(r.Note); if (note != null && note.Length > 300) note = note[..300];
             if (!r.Approve)
             {
@@ -182,6 +173,19 @@ static class Features
             using var c = db.Open(); var id = int.Parse(m.Groups[2].Value);
             var o = await c.QueryFirstOrDefaultAsync("SELECT OrderId AS id, CustomerName AS customer, Total AS total, Status AS status, PaymentStatus AS paymentStatus, ItemsConfirmedAt AS itemsConfirmedAt, Channel AS channel FROM Orders WHERE OrderId=@id", new { id });
             return o is null ? Results.NotFound(new { error = "No order has that code." }) : Results.Ok(o);
+        });
+
+        // ---------- admin: pop-up alerts for new online orders ----------
+        // Every admin page asks this every few seconds. With after=0 it only returns the newest order number (the starting point, so old orders are never announced).
+        // With after=N it returns the online orders placed since N (at most 10 shown, plus the true count) so the page can pop up a card for each one.
+        admin.MapGet("/orders/new-since", async (int? after, Db db) =>
+        {
+            using var c = db.Open();
+            var maxId = await c.ExecuteScalarAsync<int>("SELECT IFNULL(MAX(OrderId),0) FROM Orders");
+            if (after is null or <= 0 || after >= maxId) return Results.Ok(new { maxId, count = 0, orders = Array.Empty<object>() });
+            var count = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE OrderId>@after AND Channel='Online'", new { after });
+            var rows = await c.QueryAsync("SELECT o.OrderId AS id, " + Sql.Code + " AS code, o.CustomerName AS customer, o.Total AS total, o.PaymentMethod AS method, o.FulfillmentType AS fulfillment, IFNULL((SELECT SUM(i.Qty) FROM OrderItems i WHERE i.OrderId=o.OrderId),0) AS items FROM Orders o WHERE o.OrderId>@after AND o.Channel='Online' ORDER BY o.OrderId LIMIT 10", new { after });
+            return Results.Ok(new { maxId, count, orders = rows });
         });
 
         // ---------- admin: dropdown lists ----------

@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS PromoCodes (
   StartsAt        DATE NULL,
   EndsAt          DATE NULL,
   MaxUses         INT NULL,
+  MaxPerUser      INT NULL,          -- times ONE customer may use the code (NULL = no limit per customer)
   Season          VARCHAR(30) NULL,
   IsPublic        TINYINT(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
@@ -210,7 +211,7 @@ CREATE TABLE IF NOT EXISTS Orders (
   CustomerName       VARCHAR(80)   NOT NULL,
   Channel            ENUM('Online','Walk-in') NOT NULL,
   PaymentMethod      VARCHAR(60)   NOT NULL,
-  PaymentRef         VARCHAR(60)   NULL,           -- GCash reference, or cs_... (PayMongo) / pp_... (PayPal)
+  PaymentRef         VARCHAR(60)   NULL,           -- cs_... (PayMongo) / pp_... (PayPal); orders from before PayMongo-only may hold a GCash reference
   PaymentStatus      VARCHAR(10)   NOT NULL DEFAULT 'Unpaid',
   PaidAt             DATETIME      NULL,
   PaymentConfirmedBy VARCHAR(50)   NULL,
@@ -227,15 +228,6 @@ CREATE TABLE IF NOT EXISTS Orders (
   DeliveryAddress    VARCHAR(250)  NULL,
   DeliveryPhone      VARCHAR(20)   NULL,
   DeliveryFee        DECIMAL(10,2) NOT NULL DEFAULT 0,
-  DeliveryLat        DECIMAL(9,6)  NULL,           -- where the customer pinned the delivery place
-  DeliveryLng        DECIMAL(9,6)  NULL,
-  DeliveryKm         DECIMAL(6,1)  NULL,           -- road distance from the store, used for the range limit and the fee
-  LalamoveOrderId    VARCHAR(40)   NULL,
-  LalamoveStatus     VARCHAR(20)   NULL,           -- BOOKING | ASSIGNING_DRIVER | ON_GOING | PICKED_UP | COMPLETED | CANCELED | REJECTED | EXPIRED | MANUAL
-  LalamoveLink       VARCHAR(400)  NULL,
-  LalamoveDriver     VARCHAR(120)  NULL,
-  LalamoveCost       DECIMAL(10,2) NULL,           -- what the store paid Lalamove
-  LalamoveCheckedAt  DATETIME      NULL,
   Courier            VARCHAR(60)   NULL,
   TrackingNo         VARCHAR(60)   NULL,
   ReadyAt            DATETIME      NULL,
@@ -295,4 +287,29 @@ CREATE TABLE IF NOT EXISTS Messages (
 CREATE TABLE IF NOT EXISTS Settings (
   SettingKey   VARCHAR(60) PRIMARY KEY,
   SettingValue VARCHAR(260) NULL
+) ENGINE=InnoDB;
+
+-- Money the store takes out of its PayMongo wallet to a GCash account. Every withdrawal needs the admin's 2FA code; the rows below are the audit trail.
+CREATE TABLE IF NOT EXISTS WithdrawalAccounts (
+  AccountId     INT AUTO_INCREMENT PRIMARY KEY,
+  AccountName   VARCHAR(80) NOT NULL,          -- the name registered on the GCash account
+  AccountNumber VARCHAR(15) NOT NULL,          -- the GCash mobile number, 09XXXXXXXXX
+  CreatedBy     VARCHAR(50) NULL,
+  CreatedAt     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_wacct_number (AccountNumber)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS Withdrawals (
+  WithdrawalId  INT AUTO_INCREMENT PRIMARY KEY,
+  Reference     VARCHAR(20) NOT NULL DEFAULT '',   -- WD-000001
+  AccountName   VARCHAR(80) NOT NULL,
+  AccountNumber VARCHAR(15) NOT NULL,
+  Amount        DECIMAL(12,2) NOT NULL,
+  Status        VARCHAR(12) NOT NULL DEFAULT 'Pending',   -- Pending, Succeeded, Failed
+  TransferId    VARCHAR(60) NULL,                  -- PayMongo's id for the transfer
+  Error         VARCHAR(300) NULL,
+  RequestedBy   VARCHAR(50) NULL,
+  RequestedAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UpdatedAt     DATETIME NULL,
+  KEY ix_wd_status (Status)
 ) ENGINE=InnoDB;

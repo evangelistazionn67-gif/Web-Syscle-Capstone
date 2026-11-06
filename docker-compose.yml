@@ -9,13 +9,29 @@ services:
       ConnectionStrings__Syscle: "Server=db;Port=3306;Database=WebSyscleDB;User ID=root;Password=${MYSQL_ROOT_PASSWORD};AllowPublicKeyRetrieval=True;"
       Security__DataKey: "${SECURITY_DATA_KEY:-}"
       Seed__AdminPassword: "${ADMIN_PASSWORD}"
-      Payments__TestMode: "${PAYMENTS_TEST_MODE:-false}"
+      # false = visitors reach the app directly on port 8080, so X-Forwarded-For typed by a visitor is ignored. Set TRUST_PROXY=true only when a reverse proxy (Nginx, Caddy, Cloudflare...) sits in front.
+      Security__TrustProxy: "${TRUST_PROXY:-false}"
+      # set SECURE_COOKIES=true once the site is served over HTTPS (keeps the sign-in cookie off plain HTTP). Leave false for http://localhost:8080.
+      Security__SecureCookies: "${SECURE_COOKIES:-false}"
+      # the address of your live site, used in password-reset emails (required on a live site; no trailing slash)
+      App__PublicUrl: "${PUBLIC_URL:-}"
+      # email: either SMTP (for example Gmail with an App Password) or SendGrid
+      EmailSettings__SenderEmail: "${EMAIL_SENDER:-}"
+      EmailSettings__SmtpHost: "${SMTP_HOST:-}"
+      EmailSettings__SmtpPort: "${SMTP_PORT:-587}"
+      EmailSettings__SmtpUser: "${SMTP_USER:-}"
+      EmailSettings__SmtpPassword: "${SMTP_PASSWORD:-}"
       EmailSettings__SendGridApiKey: "${SENDGRID_API_KEY:-}"
+      # SMS (Semaphore, a Philippine SMS service)
+      SmsSettings__SemaphoreApiKey: "${SEMAPHORE_API_KEY:-}"
+      SmsSettings__SenderName: "${SMS_SENDER_NAME:-}"
       PayMongo__SecretKey: "${PAYMONGO_SECRET_KEY:-}"
-      PayMongo__WebhookSecret: "${PAYMONGO_WEBHOOK_SECRET:-}"
-      Lalamove__ApiKey: "${LALAMOVE_API_KEY:-}"
-      Lalamove__Secret: "${LALAMOVE_SECRET:-}"
-      Lalamove__Mode: "${LALAMOVE_MODE:-sandbox}"
+      # ways to pay on the PayMongo page. qrph = a QR code made for the order total. Remove qrph here until QR Ph is switched on in your PayMongo dashboard.
+      PayMongo__Methods: "${PAYMONGO_METHODS:-qrph,gcash,paymaya,card}"
+      # only needed if the admin page cannot read the wallet by itself (see docs/WITHDRAWALS.md)
+      PayMongo__WalletId: "${PAYMONGO_WALLET_ID:-}"
+      PayMongo__WalletAccountNumber: "${PAYMONGO_WALLET_ACCOUNT_NUMBER:-}"
+      PayMongo__WalletAccountName: "${PAYMONGO_WALLET_ACCOUNT_NAME:-}"
       PayPal__ClientId: "${PAYPAL_CLIENT_ID:-}"
       PayPal__Secret: "${PAYPAL_SECRET:-}"
     depends_on:

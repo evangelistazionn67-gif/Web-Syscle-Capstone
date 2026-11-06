@@ -26,15 +26,19 @@ builder.Services.AddSingleton(new Db(cs));
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddSingleton<SmsService>();
 builder.Services.AddSingleton<PayMongoService>();
-builder.Services.AddSingleton<LalamoveService>();
-builder.Services.AddSingleton<QrPhService>();
 builder.Services.AddSingleton<PayPalService>();
 builder.Services.AddHostedService<OrderExpiryService>();
 // the keys that sign login cookies and reset links are kept in the database (table DataProtectionKeys), not in text files on the disk
 builder.Services.AddDataProtection().SetApplicationName("Syscle");
 builder.Services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(sp => new ConfigureOptions<KeyManagementOptions>(o => o.XmlRepository = new DbXmlRepository(sp.GetRequiredService<Db>())));
 
-builder.Services.Configure<ForwardedHeadersOptions>(o =>
+// Security:TrustProxy (env Security__TrustProxy). true = the site sits behind a reverse proxy / hosting platform (Render, Nginx, Cloudflare...) that adds the real visitor address.
+// false = visitors connect straight to this app (for example "docker compose" with port 8080 published): then X-Forwarded-* headers typed by a visitor must be ignored,
+// otherwise anyone can fake their address and get around the per-address login limit.
+var trustProxy = builder.Configuration.GetValue("Security:TrustProxy", true);
+// Security:SecureCookies (env Security__SecureCookies): set true on the live HTTPS site so sign-in cookies are never sent over plain HTTP. Leave false for http://localhost testing.
+var secureCookies = builder.Configuration.GetValue("Security:SecureCookies", false);
+if (trustProxy) builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     o.KnownNetworks.Clear();
@@ -44,8 +48,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 builder.Services.AddAuthentication(o => { o.DefaultScheme = "area"; o.DefaultChallengeScheme = "area"; o.DefaultForbidScheme = "area"; })
     .AddPolicyScheme("area", "customer or admin sign-in", o => { o.ForwardDefaultSelector = Schemes.Pick; })
-    .AddCookie(Schemes.Customer, o => Schemes.Cookie(o, Schemes.Customer))
-    .AddCookie(Schemes.Admin, o => Schemes.Cookie(o, Schemes.Admin));
+    .AddCookie(Schemes.Customer, o => Schemes.Cookie(o, Schemes.Customer, secureCookies))
+    .AddCookie(Schemes.Admin, o => Schemes.Cookie(o, Schemes.Admin, secureCookies));
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("SuperAdmin", p => p.RequireRole("SuperAdmin"))
@@ -53,7 +57,7 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Customer", p => p.RequireRole("Customer"));
 
 var app = builder.Build();
-app.UseForwardedHeaders();
+if (trustProxy) app.UseForwardedHeaders();
 app.UseExceptionHandler(a => a.Run(async ctx =>
 {
     var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error; if (ex != null) Console.WriteLine("[Syscle] " + ctx.Request.Method + " " + ctx.Request.Path + " failed: " + ex);
@@ -66,9 +70,10 @@ app.UseAuthorization();
 app.Use(async (ctx, next) =>
 {
     ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    if (ctx.Request.IsHttps) ctx.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";   // once a browser has seen the HTTPS site it refuses to use plain HTTP for a year
     ctx.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";   // the admin "see the customer side" preview is a frame of this same site
     ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-    ctx.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=(self)";   // camera: scanning order QR codes. location: "use my location" when pinning a delivery place
+    ctx.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()";   // camera is needed for scanning order QR codes
     if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.Headers["Cache-Control"] = "no-store";
     // normal JSON requests are tiny; cap them so nobody can flood the server with a giant body (uploads use multipart and keep their own limit)
     if (ctx.Request.Path.StartsWithSegments("/api") && (ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
@@ -97,11 +102,7 @@ app.Use(async (ctx, next) =>
     await next();
 });
 app.UseDefaultFiles();
-app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = r =>
-{
-    // pages, scripts and styles are re-checked on every visit (a quick "not changed" answer when nothing changed), so an update shows without a hard refresh
-    var n = r.File.Name.ToLowerInvariant(); if (n.EndsWith(".html") || n.EndsWith(".js") || n.EndsWith(".css")) r.Context.Response.Headers["Cache-Control"] = "no-cache";
-} });
+app.UseStaticFiles();
 
 IResult Bad(string m) => Results.BadRequest(new { error = m });
 IResult Conflict(string m) => Results.Conflict(new { error = m });
@@ -115,9 +116,17 @@ async Task<bool> CanManage(MySqlConnection c, ClaimsPrincipal u, int targetId)
 }
 IResult Denied() => Results.Json(new { error = "Only a SuperAdmin can do that to an admin account." }, statusCode: 403);
 // Input limits: usernames and passwords are capped at 14 characters, emails at 50, so nobody can paste a huge value to overload the server.
-const int MaxName = 14, MaxPass = 14, MaxEmail = 50;
+const int MaxName = 14, MaxPass = 64, MaxEmail = 50;
 bool PwOk(string? p) => p != null && p.Length >= 8 && p.Length <= MaxPass;
-const string PwMsg = "Password must be 8 to 14 characters.";
+const string PwMsg = "Password must be 8 to 64 characters.";
+// The address put into emailed reset links. It comes from the settings (App__PublicUrl), never from the visitor's Host header: otherwise anyone could ask for a reset on someone else's
+// account with a forged Host header and the victim would receive a genuine email whose link opens the attacker's site. In Development the request address is fine.
+string? PublicBase(HttpContext ctx, IConfiguration cfg, IWebHostEnvironment env)
+{
+    var set = (cfg["App:PublicUrl"] ?? "").Trim().TrimEnd('/');
+    if (set.Length > 0) return Uri.TryCreate(set, UriKind.Absolute, out var u) && (u.Scheme == "https" || u.Scheme == "http") ? set : null;
+    return env.IsDevelopment() ? $"{ctx.Request.Scheme}://{ctx.Request.Host}" : null;
+}
 string? NormPhone(string? raw)
 {
     var d = Regex.Replace(raw ?? "", @"[^\d+]", ""); if (d.StartsWith("+63")) d = "0" + d[3..]; else if (d.StartsWith("63") && d.Length == 12) d = "0" + d[2..];
@@ -128,16 +137,22 @@ bool BadImageExt(string ext) => ext is not (".jpg" or ".jpeg" or ".png" or ".web
 var auth = app.MapGroup("/api/auth");
 var tries = new ConcurrentDictionary<string, List<DateTime>>();
 
-auth.MapPost("/register", async (RegisterReq r, Db db) =>
+auth.MapPost("/register", async (RegisterReq r, Db db, HttpContext ctx) =>
 {
     var username = (r.Username ?? "").Trim(); var email = (r.Email ?? "").Trim();
     if (!Regex.IsMatch(username, @"^[A-Za-z0-9_.-]{3,14}$")) return Bad("Username must be 3 to 14 letters, numbers, dots, dashes or underscores.");
     if (email.Length > MaxEmail || !Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$")) return Bad("Enter a valid email address (up to 50 characters).");
     if (!PwOk(r.Password)) return Bad(PwMsg);
+    string? phone = null;   // optional: it is what lets this customer reset a forgotten password by SMS
+    if (!string.IsNullOrWhiteSpace(r.Phone)) { phone = NormPhone(r.Phone); if (phone is null) return Bad("Enter a valid mobile number, like 09171234567, or leave it empty."); }
     using var c = db.Open();
+    var regKey = "reg|" + ctx.Connection.RemoteIpAddress;   // sign-ups are limited per address (10 an hour) so nobody can use them to burn server time or fill the user list
+    if (await LoginGuard.IsBlockedAsync(c, regKey, 10, 60)) return Throttled();
     var taken = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Users WHERE Username=@username OR Email=@email", new { username, email });
     if (taken > 0) return Conflict("That username or email is already registered.");
-    await c.ExecuteAsync("INSERT INTO Users(Username,Email,PasswordHash,Role) VALUES(@username,@email,@h,'Customer')", new { username, email, h = Pw.Hash(r.Password!) });
+    if (phone != null && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Users WHERE Phone=@phone", new { phone }) > 0) return Conflict("That mobile number is already used by another account.");
+    await c.ExecuteAsync("INSERT INTO Users(Username,Email,Phone,PasswordHash,Role) VALUES(@username,@email,@phone,@h,'Customer')", new { username, email, phone, h = Pw.Hash(r.Password!) });
+    await LoginGuard.FailAsync(c, regKey);
     return Results.Ok(new { ok = true });
 });
 
@@ -158,14 +173,20 @@ auth.MapPost("/login", async (LoginReq r, Db db, HttpContext ctx) =>
     if ((r.Login ?? "").Length > MaxEmail || (r.Password ?? "").Length > 64) return Results.Json(new { error = "Invalid credentials. Please try again." }, statusCode: 401);
     using var c = db.Open();
     // attempts are counted in the database (table LoginAttempts): restarting the server or editing a file does not reset them
-    var keyIp = "ip|" + ctx.Connection.RemoteIpAddress; var keyUser = "user|" + (r.Login ?? "").Trim().ToLowerInvariant();
-    if (await LoginGuard.IsBlockedAsync(c, keyIp, 30, 10) || await LoginGuard.IsBlockedAsync(c, keyUser, 8, 10)) return Throttled();
+    // Three counters: 30 wrong tries per address, 8 per username FROM ONE ADDRESS, and 60 per username from anywhere.
+    // The per-username-per-address counter is what stops password guessing without letting a stranger lock the real owner (or the admin) out of their own account with a few bad tries.
+    // The 60-per-username counter still slows a guessing attack that is spread over many addresses.
+    var who = (r.Login ?? "").Trim().ToLowerInvariant(); var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var keyIp = "ip|" + ip; var keyUserIp = "uip|" + who + "|" + ip; var keyUser = "user|" + who;
+    if (await LoginGuard.IsBlockedAsync(c, keyIp, 30, 10) || await LoginGuard.IsBlockedAsync(c, keyUserIp, 8, 10) || await LoginGuard.IsBlockedAsync(c, keyUser, 60, 10)) return Throttled();
     var u = await c.QueryFirstOrDefaultAsync<UserRow>("SELECT UserId,Username,Email,PasswordHash,Role,Status,SessionVersion,TwoFactorEnabled FROM Users WHERE Username=@l OR Email=@l LIMIT 1", new { l = (r.Login ?? "").Trim() });
     // a missing user costs the same time as a wrong password, so response time does not reveal which usernames exist
     var ok = Pw.Verify(r.Password ?? "", u?.PasswordHash ?? Pw.Dummy);
-    if (u is null || !ok) { await LoginGuard.FailAsync(c, keyIp); await LoginGuard.FailAsync(c, keyUser); return Results.Json(new { error = "Invalid credentials. Please try again." }, statusCode: 401); }
+    if (u is null || !ok) { await LoginGuard.FailAsync(c, keyIp); await LoginGuard.FailAsync(c, keyUserIp); await LoginGuard.FailAsync(c, keyUser); return Results.Json(new { error = "Invalid credentials. Please try again." }, statusCode: 401); }
     if (u.Status != "Active") return Results.Json(new { error = "This account is suspended. Please contact the store admin." }, statusCode: 403);
-    await LoginGuard.ClearAsync(c, keyUser);
+    await LoginGuard.ClearAsync(c, keyUserIp); await LoginGuard.ClearAsync(c, keyUser);
+    // upgrade an older, weaker password hash now that we know the correct password (this also retires any reset link issued before the upgrade)
+    if (Pw.NeedsRehash(u.PasswordHash)) await c.ExecuteAsync("UPDATE Users SET PasswordHash=@h WHERE UserId=@id", new { h = Pw.Hash(r.Password!), id = u.UserId });
     if (u.TwoFactorEnabled) return Results.Ok(new { require2fa = true, ticket = await Tickets.IssueAsync(c, u.UserId, "2fa", 5) });
     return await SignInUser(ctx, c, u.UserId, u.Username, u.Role);
 });
@@ -203,24 +224,41 @@ auth.MapGet("/whoami", async (HttpContext ctx, Db db) =>
 // called when the admin really clicks or types: this is what the idle timer measures
 auth.MapPost("/activity", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); await c.ExecuteAsync("UPDATE Users SET LastActive=NOW() WHERE UserId=@id", new { id = Uid(u) }); return Results.Ok(new { ok = true }); }).RequireAuthorization();
 
-auth.MapPost("/forgot", async (ForgotReq r, Db db, EmailService emailer, HttpContext ctx, IWebHostEnvironment env) =>
+auth.MapPost("/forgot", async (ForgotReq r, Db db, EmailService emailer, HttpContext ctx, IWebHostEnvironment env, IConfiguration cfg) =>
 {
     var email = (r.Email ?? "").Trim().ToLowerInvariant();
-    if (email.Length > MaxEmail) return Results.Ok(new { message = "If that email has an account, a password reset link has been sent. It works for 30 minutes." });
     var msg = "If that email has an account, a password reset link has been sent. It works for 30 minutes.";
+    if (email.Length > MaxEmail) return Results.Ok(new { message = msg });
     using var c = db.Open();
-    var fkey = "forgot|" + email; if (await LoginGuard.IsBlockedAsync(c, fkey, 5, 10)) return Throttled(); await LoginGuard.FailAsync(c, fkey);
+    // 5 requests per email and 15 per address in 10 minutes: nobody can use this form to flood inboxes or use up the email provider's daily limit
+    var fkey = "forgot|" + email; var fip = "forgotip|" + ctx.Connection.RemoteIpAddress;
+    if (await LoginGuard.IsBlockedAsync(c, fkey, 5, 10) || await LoginGuard.IsBlockedAsync(c, fip, 15, 10)) return Throttled();
+    await LoginGuard.FailAsync(c, fkey); await LoginGuard.FailAsync(c, fip);
     var user = await c.QueryFirstOrDefaultAsync<UserRow>("SELECT UserId, Username, Email, PasswordHash FROM Users WHERE Email=@email AND Status='Active'", new { email });
     if (user is null) return Results.Ok(new { message = msg });
+    var baseUrl = PublicBase(ctx, cfg, env);
+    if (baseUrl is null) { Console.WriteLine("[Syscle] No reset email was sent: set App__PublicUrl to the address of your site (for example https://yourshop.example.com)."); return Results.Ok(new { message = msg }); }
     // The password is NOT changed here. The person must open the link and choose a new one.
-    var link = $"{ctx.Request.Scheme}://{ctx.Request.Host}/reset.html?token={Uri.EscapeDataString(ResetToken.Make(ctx.RequestServices, user))}";
-    var sent = false;
-    try { sent = await emailer.SendPasswordResetAsync(user.Email, user.Username, link); } catch (Exception ex) { Console.WriteLine("[Syscle] Reset email failed: " + ex.Message); }
-    if (!sent)
+    var link = $"{baseUrl}/reset.html?token={Uri.EscapeDataString(ResetToken.Make(ctx.RequestServices, user))}";
+    if (env.IsDevelopment())
     {
-        Console.WriteLine("[Syscle] Email is not set up. Reset link for " + user.Email + ": " + link);
-        if (env.IsDevelopment()) return Results.Ok(new { message = "Email is not set up on this server, so here is your reset link instead.", devLink = link });
+        var sent = false;
+        try { sent = await emailer.SendPasswordResetAsync(user.Email, user.Username, link); } catch (Exception ex) { Console.WriteLine("[Syscle] Reset email failed: " + ex.Message); }
+        if (!sent)
+        {
+            Console.WriteLine("[Syscle] Email is not set up, so no reset email was sent to " + user.Email + ".");   // the link itself is a password-equivalent secret: it is only ever shown in Development
+            Console.WriteLine("[Syscle] (Development only) reset link: " + link);
+            return Results.Ok(new { message = "Email is not set up on this server, so here is your reset link instead.", devLink = link });
+        }
+        return Results.Ok(new { message = msg });
     }
+    // Live site: send in the background so the answer comes back at the same speed whether or not the email has an account (a slow answer would reveal who is registered).
+    var to = user.Email; var name = user.Username;
+    _ = Task.Run(async () =>
+    {
+        try { if (!await emailer.SendPasswordResetAsync(to, name, link)) Console.WriteLine("[Syscle] The reset email to " + to + " was not sent (is email set up? see docs/EMAIL_SMS_SETUP.md)."); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Reset email failed: " + ex.Message); }
+    });
     return Results.Ok(new { message = msg });
 });
 
@@ -321,7 +359,6 @@ app.MapGet("/api/products/{id:int}/reviews", async (int id, Db db) =>
 });
 
 app.MapGet("/api/bundles", async (Db db, IConfiguration cfg) => { using var c = db.Open(); await Bundles.RefreshIfStale(c, cfg.GetValue("Bundles:SlowDays", 30), false); return Results.Ok(await Bundles.ListAsync(c, true)); });
-app.MapGet("/api/settings/payment-qr", async (Db db) => { using var c = db.Open(); var show = await c.ExecuteScalarAsync<string>("SELECT SettingValue FROM Settings WHERE SettingKey='ShowPaymentQr'"); var img = await c.ExecuteScalarAsync<string>("SELECT SettingValue FROM Settings WHERE SettingKey='PaymentQrImage'"); return Results.Ok(new { show = show == "1", image = img }); });
 
 var shop = app.MapGroup("/api").RequireAuthorization("Customer");
 shop.MapPost("/products/{id:int}/reviews", async (int id, ReviewReq r, ClaimsPrincipal u, Db db) =>
@@ -384,56 +421,40 @@ shop.MapPost("/cart/bundle", async (BundleAddReq r, ClaimsPrincipal u, Db db) =>
 });
 
 shop.MapGet("/cart/bundles", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); var (discount, applied) = await Bundles.ForCart(c, Uid(u), null); return Results.Ok(new { discount, applied }); });
-shop.MapPost("/promo", async (PromoReq r, Db db) => { using var c = db.Open(); var (pct, perr) = await Promos.Check(c, (r.Code ?? "").Trim(), null); return pct is null ? Results.NotFound(new { error = perr ?? "Invalid code." }) : Results.Ok(new { percent = pct }); });
-shop.MapGet("/payment-methods", async (Db db, PayMongoService pm, PayPalService pp, IConfiguration cfg) =>
+shop.MapPost("/promo", async (PromoReq r, ClaimsPrincipal u, Db db) => { using var c = db.Open(); var (pct, perr) = await Promos.Check(c, (r.Code ?? "").Trim(), null, Uid(u)); return pct is null ? Results.NotFound(new { error = perr ?? "Invalid code." }) : Results.Ok(new { percent = pct }); });
+shop.MapGet("/payment-methods", async (Db db, PayMongoService pm) =>
 {
-    // every payment method the store switched on is shown. An online one whose keys are not set yet is marked (test mode lets it be tried with a fake payment page).
-    using var c = db.Open(); var test = cfg.GetValue("Payments:TestMode", false);
-    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label, AccountNumber, AccountName FROM PaymentMethods WHERE IsOn=1 AND MethodCode<>'qrph'");
-    return Results.Ok(rows.Select(m => { var ready = m.Code == "paymongo" ? pm.IsReady : m.Code == "paypal" ? pp.IsReady : true; return new { code = m.Code, label = m.Label, accountNumber = m.AccountNumber, accountName = m.AccountName, ready, test = !ready && test, online = m.Code is "paymongo" or "paypal" }; }));
+    // The two ways to pay: cash at the store, or online through PayMongo (GCash, Maya, QR Ph, cards and other networks). An online method whose PayMongo key is not set yet is shown but cannot be picked.
+    using var c = db.Open();
+    var rows = await c.QueryAsync<PayMethodRow>("SELECT MethodCode AS Code, Label FROM PaymentMethods WHERE IsOn=1 AND MethodCode IN ('cash','paymongo') ORDER BY FIELD(MethodCode,'cash','paymongo')");
+    return Results.Ok(rows.Select(m => new { code = m.Code, label = m.Label, ready = m.Code != "paymongo" || pm.IsReady, online = m.Code == "paymongo" }));
 });
 
 shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailService emailer, PayMongoService pm, PayPalService pp, HttpRequest req, IConfiguration cfg) =>
 {
     using var c = db.Open(); using var tx = c.BeginTransaction(); var uid = Uid(u);
-    var lines = (await c.QueryAsync<Line>("SELECT p.ProductId, p.Name, p.Price, ci.Qty, ci.Size, ci.Color FROM CartItems ci JOIN Products p ON p.ProductId=ci.ProductId WHERE ci.UserId=@uid", new { uid }, tx)).ToList();
+    var lines = (await c.QueryAsync<Line>("SELECT p.ProductId, p.Name, p.Price, ci.Qty, ci.Size, ci.Color FROM CartItems ci JOIN Products p ON p.ProductId=ci.ProductId WHERE ci.UserId=@uid FOR UPDATE OF ci", new { uid }, tx)).ToList();   // FOR UPDATE: a second checkout from the same customer (double click, two tabs) waits here, then finds the cart already empty
     if (lines.Count == 0) return Bad("Cart empty.");
-    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1", new { m = r.PaymentMethod }, tx);
-    if (method is null || r.PaymentMethod == "qrph") return Bad("Invalid payment.");
-    var online = r.PaymentMethod is "paymongo" or "paypal"; var providerReady = r.PaymentMethod == "paypal" ? pp.IsReady : pm.IsReady; var testPay = online && !providerReady && cfg.GetValue("Payments:TestMode", false);
-    if (online && !providerReady && !testPay) return Bad("This online payment is not set up yet. Please choose another method.");
+    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1 AND MethodCode IN ('cash','paymongo')", new { m = r.PaymentMethod }, tx);
+    if (method is null) return Bad("Invalid payment.");
+    var online = r.PaymentMethod == "paymongo";
+    if (online && !pm.IsReady) return Bad("Online payment is not available right now. Please choose another method.");
     // Home delivery: the customer gives an address and a phone number the rider can call. The delivery fee is set by the store.
-    var delivery = r.Fulfillment == "Delivery"; string? addr = null, dphone = null; decimal fee = 0; int codMax = 0; double dkm = 0; double? dlat = null, dlng = null;
+    var delivery = r.Fulfillment == "Delivery"; string? addr = null, dphone = null; decimal fee = 0;
     if (delivery)
     {
         addr = Regex.Replace((r.Address ?? "").Trim(), @"\s+", " "); dphone = (r.Phone ?? "").Trim();
         if (addr.Length < 10 || addr.Length > 250) return Bad("Enter your full delivery address (house number, street, barangay, city).");
         if (!Regex.IsMatch(dphone, @"^[0-9+\- ]{7,20}$")) return Bad("Enter a phone number the rider can call.");
-        // the store delivers by itself within a set range. The pin on the map is measured here; the fee is worked out here, never taken from the browser.
-        if (!Geo.ValidPoint(r.Lat, r.Lng)) return Bad("Pin your delivery place on the map so we can check the distance.");
-        // settings are read on their own connection: this one is busy with the order transaction
-        DeliveryRule rule; using (var c2 = db.Open()) { rule = await DeliveryRules.LoadAsync(c2); codMax = await Cfg.IntAsync(c2, "CodMax", 0, 1000000); }
-        if (!rule.Enabled) return Bad("Home delivery is not available right now. Please choose Store pick-up.");
-        dkm = Geo.RoadKm(rule.StoreLat, rule.StoreLng, r.Lat!.Value, r.Lng!.Value);
-        if ((decimal)dkm > rule.MaxKm) return Bad($"Sorry, we deliver only within {rule.MaxKm:0.#} km of the store. Your place is about {dkm:0.#} km away. Please choose Store pick-up.");
-        fee = DeliveryRules.Fee(rule, dkm); dlat = r.Lat; dlng = r.Lng;
-    }
-    // GCash: the customer pays the store's GCash number first, then types the reference number from their GCash receipt. The admin checks it before completing the order.
-    string? payRef = null;
-    if (r.PaymentMethod == "gcash")
-    {
-        payRef = Regex.Replace((r.PaymentRef ?? "").Trim(), @"\s", "");
-        if (!Regex.IsMatch(payRef, @"^[A-Za-z0-9]{8,20}$")) return Bad("Enter the GCash reference number from your receipt (8 to 20 letters or numbers).");
-        if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE PaymentRef=@payRef AND Status<>'Cancelled'", new { payRef }, tx) > 0) return Conflict("That GCash reference number was already used for another order.");
+        var feeText = await c.ExecuteScalarAsync<string>("SELECT SettingValue FROM Settings WHERE SettingKey='DeliveryFee'", null, tx);
+        fee = decimal.TryParse(feeText, out var fv) && fv >= 0 && fv <= 5000 ? fv : 100m;
     }
     if (r.PickupDate is null || r.PickupDate.Value.Date < Promos.Today || r.PickupDate.Value.Date > Promos.Today.AddDays(30)) return Bad("Invalid date.");
     var pct = 0; string? code = null;
-    if (!string.IsNullOrWhiteSpace(r.PromoCode)) { code = r.PromoCode.Trim(); var (found, promoErr) = await Promos.Check(c, code, tx); if (found is null) return Bad(promoErr ?? "Invalid promo."); pct = found.Value; }
+    if (!string.IsNullOrWhiteSpace(r.PromoCode)) { code = r.PromoCode.Trim(); var (found, promoErr) = await Promos.Check(c, code, tx, uid); if (found is null) return Bad(promoErr ?? "Invalid promo."); pct = found.Value; }
     var sub = lines.Sum(l => l.Price * l.Qty); var (bundleDiscount, _) = await Bundles.ForCart(c, uid, tx); var discount = Math.Round((sub - bundleDiscount) * pct / 100m, 2); var total = sub - bundleDiscount - discount + fee;
-    // cash on delivery is allowed, but only up to the limit the store sets (0 = no limit), because the money is collected after the goods are handed over
-    if (delivery && r.PaymentMethod == "cash" && codMax > 0 && total > codMax) return Bad($"Cash on delivery is only for orders up to ₱{codMax:N0}. Please pay with GCash or PayMongo, or choose Store pick-up.");
     var name = await c.ExecuteScalarAsync<string>("SELECT Username FROM Users WHERE UserId=@uid", new { uid }, tx);
-    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PaymentRef,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee,DeliveryLat,DeliveryLng,DeliveryKm) VALUES(@uid,@name,'Online',@method,@payRef,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee,@dlat,@dlng,@dkmv)", new { uid, name, method, payRef, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee, dlat, dlng, dkmv = delivery ? (double?)dkm : null }, tx);
+    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,PromoCode,Discount,BundleDiscount,Total,Status,PickupDate,FulfillmentType,DeliveryAddress,DeliveryPhone,DeliveryFee) VALUES(@uid,@name,'Online',@method,@code,@discount,@bundleDiscount,@total,'Pending',@pickup,@ft,@addr,@dphone,@fee)", new { uid, name, method, code, discount, bundleDiscount, total, pickup = r.PickupDate.Value.Date, ft = delivery ? "Delivery" : "Pickup", addr, dphone, fee }, tx);
     var orderId = await c.ExecuteScalarAsync<int>("SELECT CAST(LAST_INSERT_ID() AS SIGNED)", null, tx);
     var soldOut = await Orders.TakeStock(c, tx, orderId, lines);
     if (soldOut != null) return Conflict($"Out of stock: {soldOut}");
@@ -447,39 +468,27 @@ shop.MapPost("/checkout", async (CheckoutReq r, ClaimsPrincipal u, Db db, EmailS
             await emailer.SendOrderPlacedEmailAsync(who.Email, who.CustomerName ?? "", orderCode, total, r.PickupDate!.Value.Date, string.Join(", ", lines.Select(l => $"{l.Name} x{l.Qty}")));
     }
     catch (Exception ex) { Console.WriteLine("[Syscle] Order email failed: " + ex.Message); }
-    // online payment: open a PayMongo checkout page (GCash, Maya or card). The order stays Unpaid until PayMongo confirms.
+    // online payment: open a PayMongo checkout page. PayMongo makes a QR code for exactly this order's total (QR Ph, scanned from any bank or e-wallet app) and also offers GCash, Maya and card. The order stays Unpaid until PayMongo confirms.
     string? checkoutUrl = null, payError = null;
-    if (testPay)
-    {
-        var tref = "test_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
-        await c.ExecuteAsync("UPDATE Orders SET PaymentRef=@tref WHERE OrderId=@orderId", new { tref, orderId }); checkoutUrl = "/Pages/pay_sandbox.html?order=" + orderId;
-    }
-    else if (online)
+    if (online)
     {
         var origin = $"{req.Scheme}://{req.Host}";
-        var (sid, url, err) = r.PaymentMethod == "paypal"
-            ? await pp.CreateOrderAsync(orderCode, total, $"{origin}/Pages/orders.html?paid={orderId}", $"{origin}/Pages/orders.html?cancelled={orderId}")
-            : await pm.CreateSessionAsync(orderCode, orderId, total, $"{origin}/Pages/orders.html?paid={orderId}", $"{origin}/Pages/orders.html?cancelled={orderId}");
+        var (sid, url, err) = await pm.CreateSessionAsync(orderCode, orderId, total, $"{origin}/Pages/orders.html?paid={orderId}", $"{origin}/Pages/orders.html?cancelled={orderId}");
         if (sid != null) { await c.ExecuteAsync("UPDATE Orders SET PaymentRef=@sid WHERE OrderId=@orderId", new { sid, orderId }); checkoutUrl = url; } else payError = err;
     }
     return Results.Ok(new { orderCode, orderId, total, deliveryFee = fee, checkoutUrl, payError });
 });
 
-// Pay later: reopens the online checkout (PayMongo or PayPal) for an unpaid order.
-shop.MapPost("/orders/{id:int}/pay", async (int id, ClaimsPrincipal u, Db db, PayMongoService pm, PayPalService pp, HttpRequest req) =>
+// Pay later: reopens the PayMongo checkout page for an unpaid online order.
+shop.MapPost("/orders/{id:int}/pay", async (int id, ClaimsPrincipal u, Db db, PayMongoService pm, HttpRequest req) =>
 {
     using var c = db.Open();
-    var code = await c.ExecuteScalarAsync<string>("SELECT pm.MethodCode FROM Orders o JOIN PaymentMethods pm ON pm.Label = o.PaymentMethod WHERE o.OrderId=@id AND o.UserId=@uid AND pm.MethodCode IN ('paymongo','paypal') LIMIT 1", new { id, uid = Uid(u) });
-    var o = code is null ? null : await c.QueryFirstOrDefaultAsync<OrderLock>("SELECT Status, PaymentRef, PaymentStatus, FulfillmentType FROM Orders WHERE OrderId=@id AND UserId=@uid", new { id, uid = Uid(u) });
+    var online = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders o JOIN PaymentMethods pm ON pm.Label = o.PaymentMethod WHERE o.OrderId=@id AND o.UserId=@uid AND pm.MethodCode='paymongo'", new { id, uid = Uid(u) }) > 0;
+    var o = !online ? null : await c.QueryFirstOrDefaultAsync<OrderLock>("SELECT Status, PaymentRef, PaymentStatus, FulfillmentType FROM Orders WHERE OrderId=@id AND UserId=@uid", new { id, uid = Uid(u) });
     if (o is null) return Results.NotFound(new { error = "Not found." }); if (o.Status != "Pending" || o.PaymentStatus == "Paid") return Conflict("This order does not need a payment.");
-    var paypal = code == "paypal";
-    if (o.PaymentRef != null && o.PaymentRef.StartsWith("test_")) return Results.Ok(new { checkoutUrl = "/Pages/pay_sandbox.html?order=" + id });
-    if (!(paypal ? pp.IsReady : pm.IsReady)) return Bad("Online payment is not available right now.");
-    // a PayPal order the customer already approved but never finished is captured now, so nobody pays twice
-    if (paypal && o.PaymentRef != null && o.PaymentRef.StartsWith("pp_") && await pp.IsPaidAsync(o.PaymentRef[3..])) { await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE OrderId=@id", new { id }); return Results.Ok(new { paid = true }); }
+    if (!pm.IsReady) return Bad("Online payment is not available right now.");
     var total = await c.ExecuteScalarAsync<decimal>("SELECT Total FROM Orders WHERE OrderId=@id", new { id }); var oc = "ORD-" + id.ToString("D6"); var origin = $"{req.Scheme}://{req.Host}";
-    var (sid, url, err) = paypal ? await pp.CreateOrderAsync(oc, total, $"{origin}/Pages/orders.html?paid={id}", $"{origin}/Pages/orders.html?cancelled={id}")
-                                 : await pm.CreateSessionAsync(oc, id, total, $"{origin}/Pages/orders.html?paid={id}", $"{origin}/Pages/orders.html?cancelled={id}");
+    var (sid, url, err) = await pm.CreateSessionAsync(oc, id, total, $"{origin}/Pages/orders.html?paid={id}", $"{origin}/Pages/orders.html?cancelled={id}");
     if (sid is null) return Bad(err ?? "Could not open the payment page.");
     await c.ExecuteAsync("UPDATE Orders SET PaymentRef=@sid WHERE OrderId=@id", new { sid, id }); return Results.Ok(new { checkoutUrl = url });
 });
@@ -491,8 +500,8 @@ shop.MapPost("/orders/{id:int}/verify-payment", async (int id, ClaimsPrincipal u
     if (o is null) return Results.NotFound(new { error = "Not found." });
     if (o.PaymentStatus == "Paid") return Results.Ok(new { paid = true });
     // PayPal: the customer comes back approved, and this call captures the money (PayPal only takes it at this step)
-    if (o.PaymentRef != null && o.PaymentRef.StartsWith("pp_") && await pp.IsPaidAsync(o.PaymentRef[3..])) { await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE OrderId=@id", new { id }); return Results.Ok(new { paid = true }); }
-    if (o.PaymentRef != null && o.PaymentRef.StartsWith("cs_") && await pm.IsPaidAsync(o.PaymentRef)) { await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE OrderId=@id", new { id }); return Results.Ok(new { paid = true }); }
+    if (o.PaymentRef != null && o.PaymentRef.StartsWith("pp_") && await pp.IsPaidAsync(o.PaymentRef[3..])) { await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + " WHERE OrderId=@id AND PaymentStatus<>'Paid'", new { id }); return Results.Ok(new { paid = true }); }
+    if (o.PaymentRef != null && o.PaymentRef.StartsWith("cs_") && await pm.IsPaidAsync(o.PaymentRef)) { await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + " WHERE OrderId=@id AND PaymentStatus<>'Paid'", new { id }); return Results.Ok(new { paid = true }); }
     return Results.Ok(new { paid = false });
 });
 // PayMongo calls this address when a payment is made (set it in the PayMongo dashboard: https://YOUR-SITE/api/webhooks/paymongo).
@@ -500,26 +509,22 @@ app.MapPost("/api/webhooks/paymongo", async (HttpRequest req, Db db, PayMongoSer
 {
     using var reader = new StreamReader(req.Body); var payload = await reader.ReadToEndAsync();
     if (!pm.VerifySignature(payload, req.Headers["Paymongo-Signature"].ToString())) return Results.Unauthorized();
+    string? sid = null;
     try
     {
         using var doc = JsonDocument.Parse(payload); var attrs = doc.RootElement.GetProperty("data").GetProperty("attributes");
-        if (attrs.GetProperty("type").GetString() == "checkout_session.payment.paid")
-        {
-            var sid = attrs.GetProperty("data").GetProperty("id").GetString(); using var c = db.Open();
-            await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=NOW() WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid });
-        }
-        else if (attrs.GetProperty("type").GetString() == "payment.paid")
-        {
-            // in-shop QR Ph payment: the payment names the payment intent that was saved on the order
-            var pid = attrs.GetProperty("data").GetProperty("attributes").GetProperty("payment_intent_id").GetString(); using var c = db.Open();
-            if (!string.IsNullOrEmpty(pid)) await QrPay.MarkPaidByIntentAsync(c, pid);
-        }
+        if (attrs.GetProperty("type").GetString() == "checkout_session.payment.paid") sid = attrs.GetProperty("data").GetProperty("id").GetString();
     }
-    catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook error: " + ex.Message); }
+    catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not be read: " + ex.Message); return Results.Ok(new { ok = true }); }   // a payload we cannot read will not get better by retrying
+    if (sid != null)
+    {
+        try { using var c = db.Open(); await c.ExecuteAsync("UPDATE Orders SET " + Sql.MarkPaid + " WHERE PaymentRef=@sid AND PaymentStatus<>'Paid'", new { sid }); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo webhook could not save the payment: " + ex.Message); return Results.StatusCode(500); }   // an error status makes PayMongo send the event again later
+    }
     return Results.Ok(new { ok = true });
 });
 
-shop.MapGet("/orders", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.PickupDate AS pickup, o.PaymentMethod AS payment, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.DeliveryKm AS deliveryKm, o.LalamoveStatus AS lalamoveStatus, o.LalamoveLink AS lalamoveLink, o.LalamoveDriver AS lalamoveDriver, o.LalamoveCost AS lalamoveCost, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE o.UserId=@uid ORDER BY o.OrderId DESC", new { uid = Uid(u) })); });
+shop.MapGet("/orders", async (ClaimsPrincipal u, Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.PickupDate AS pickup, o.PaymentMethod AS payment, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE o.UserId=@uid ORDER BY o.OrderId DESC", new { uid = Uid(u) })); });
 shop.MapPost("/orders/{id:int}/cancel", async (int id, ClaimsPrincipal u, Db db) =>
 {
     using var c = db.Open(); using var tx = c.BeginTransaction();
@@ -534,11 +539,11 @@ var admin = app.MapGroup("/api/admin").RequireAuthorization("Admin");
 
 
 // ---------- store info (shown in the help window; edited by admins in Settings) ----------
-string[] StoreKeys = { "StoreName", "StoreTagline", "StoreAddress", "StorePhone", "StoreHours", "PickupNote", "DeliveryFee", "StoreLat", "StoreLng", "DeliveryMaxKm", "DeliveryBaseFee", "DeliveryPerKm", "LalamoveService", "ReceiptFooter", "StoreTIN", "AutoPrintReceipt", "CodMax" };
+string[] StoreKeys = { "StoreName", "StoreTagline", "StoreAddress", "StorePhone", "StoreHours", "PickupNote", "DeliveryFee" };
 async Task<Dictionary<string, string>> StoreInfo(MySqlConnection c)
 {
     var rows = await c.QueryAsync<KV>("SELECT SettingKey AS K, IFNULL(SettingValue,'') AS V FROM Settings WHERE SettingKey IN @keys", new { keys = StoreKeys });
-    var d = StoreKeys.ToDictionary(k => k, _ => ""); foreach (var row in rows) d[row.K] = row.V; if (d["StoreName"] == "") d["StoreName"] = "Web-Syscle"; foreach (var k in StoreKeys) if (d[k] == "" && Cfg.Defaults.TryGetValue(k, out var dv)) d[k] = dv; return d;
+    var d = StoreKeys.ToDictionary(k => k, _ => ""); foreach (var row in rows) d[row.K] = row.V; if (d["StoreName"] == "") d["StoreName"] = "Web-Syscle"; if (!rows.Any(x => x.K == "DeliveryFee")) d["DeliveryFee"] = "100"; return d;
 }
 app.MapGet("/api/store-info", async (Db db) =>
 {
@@ -560,11 +565,24 @@ auth.MapPost("/forgot-sms", async (SmsForgotReq r, Db db, SmsService sms, HttpCo
     var msg = "If that number is registered, a 6-digit code was sent by SMS. It works for 10 minutes.";
     if (user is null) return Results.Ok(new { message = msg, ticket = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant() });
     var ticket = await Tickets.IssueAsync(c, user.UserId, "sms", 10, code);
+    var text = $"Web-Syscle code: {code}. Valid for 10 minutes. Do not share it with anyone.";
+    if (!env.IsDevelopment())
+    {
+        // Live site: send in the background so the answer is as fast for a registered number as for an unknown one.
+        var to = phone;
+        _ = Task.Run(async () =>
+        {
+            try { if (!await sms.SendAsync(to, text)) Console.WriteLine("[Syscle] The recovery code to " + to + " was not sent (is SmsSettings__SemaphoreApiKey set? see docs/EMAIL_SMS_SETUP.md)."); }
+            catch (Exception ex) { Console.WriteLine("[Syscle] SMS failed: " + ex.Message); }
+        });
+        return Results.Ok(new { message = msg, ticket });
+    }
     var sent = false;
-    try { sent = await sms.SendAsync(phone, $"Web-Syscle code: {code}. Valid for 10 minutes. Do not share it with anyone."); } catch (Exception ex) { Console.WriteLine("[Syscle] SMS failed: " + ex.Message); }
+    try { sent = await sms.SendAsync(phone, text); } catch (Exception ex) { Console.WriteLine("[Syscle] SMS failed: " + ex.Message); }
     if (!sent)
     {
-        Console.WriteLine($"[Syscle] SMS is not set up. Recovery code for {phone}: {code}");
+        Console.WriteLine($"[Syscle] SMS is not set up, so no recovery code was sent to {phone}.");   // the code is a password-equivalent secret: it is only ever shown in Development
+        if (env.IsDevelopment()) Console.WriteLine($"[Syscle] (Development only) recovery code for {phone}: {code}");
         if (env.IsDevelopment()) return Results.Ok(new { message = "SMS is not set up on this server, so here is your test code instead: " + code, ticket, devCode = code });
     }
     return Results.Ok(new { message = msg, ticket });
@@ -618,30 +636,37 @@ admin.MapPost("/messages/{userId:int}", async (int userId, MessageReq r, Db db) 
 });
 admin.MapDelete("/messages/{userId:int}", async (int userId, Db db) => { using var c = db.Open(); await c.ExecuteAsync("DELETE FROM Messages WHERE ThreadUserId=@userId", new { userId }); return Results.Ok(new { ok = true }); });
 
-admin.MapGet("/store-info", async (Db db, SmsService sms, EmailService mail) => { using var c = db.Open(); return Results.Ok(new { info = await StoreInfo(c), smsReady = sms.IsReady, emailReady = mail.IsReady }); });
+admin.MapGet("/store-info", async (Db db, SmsService sms, EmailService mail, IConfiguration cfg) => { using var c = db.Open(); return Results.Ok(new { info = await StoreInfo(c), smsReady = sms.IsReady, emailReady = mail.IsReady, emailVia = mail.Via, publicUrlReady = !string.IsNullOrWhiteSpace(cfg["App:PublicUrl"]) }); });
+// Lets the admin prove that email / SMS really work (a real message to an address or number they type) without waiting for a customer to forget a password.
+admin.MapPost("/messaging-test", async (MessagingTestReq r, ClaimsPrincipal u, Db db, EmailService mail, SmsService sms) =>
+{
+    var channel = (r.Channel ?? "").Trim().ToLowerInvariant(); var to = (r.To ?? "").Trim();
+    using var c = db.Open(); var key = "msgtest|" + (u.Identity?.Name ?? "admin");
+    if (await LoginGuard.IsBlockedAsync(c, key, 10, 60)) return Throttled(); await LoginGuard.FailAsync(c, key);
+    string Short(Exception ex) => ex.Message.Length > 160 ? ex.Message[..160] : ex.Message;
+    if (channel == "email")
+    {
+        if (to.Length > MaxEmail || !Regex.IsMatch(to, @"^[^@\s]+@[^@\s]+\.[^@\s]+$")) return Bad("Enter a valid email address.");
+        if (!mail.IsReady) return Bad("Email is not set up yet. Add the SMTP or SendGrid settings (see docs/EMAIL_SMS_SETUP.md), restart the site and try again.");
+        try { return await mail.SendEmailAsync(to, "Web-Syscle test email", "<p>This is a test email from your Web-Syscle store. Password reset emails are sent the same way.</p>") ? Results.Ok(new { ok = true, message = "Test email sent to " + to + ". Check the inbox and the spam folder." }) : Bad("The email provider did not accept the message. The server log says why."); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Test email failed: " + ex.Message); return Bad("The email could not be sent: " + Short(ex)); }
+    }
+    if (channel == "sms")
+    {
+        var phone = NormPhone(to); if (phone is null) return Bad("Enter a mobile number, like 09171234567.");
+        if (!sms.IsReady) return Bad("SMS is not set up yet. Add the Semaphore API key (see docs/EMAIL_SMS_SETUP.md), restart the site and try again.");
+        try { return await sms.SendAsync(phone, "Web-Syscle test message. SMS password recovery is working.") ? Results.Ok(new { ok = true, message = "Test SMS sent to " + phone + "." }) : Bad("The SMS provider did not accept the message. The server log says why (often: no credits left, or the sender name is not approved)."); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Test SMS failed: " + ex.Message); return Bad("The SMS could not be sent: " + Short(ex)); }
+    }
+    return Bad("Choose email or SMS.");
+});
 admin.MapPut("/store-info", async (Dictionary<string, string?> r, Db db) =>
 {
     using var c = db.Open();
     foreach (var k in StoreKeys) if (r.TryGetValue(k, out var v))
     {
         v = (v ?? "").Trim(); if (v.Length > 200) return Bad("Each field can be up to 200 characters.");
-        if ((k == "StoreLat" || k == "StoreLng") && v != "" && !double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)) return Bad("The store location must be numbers, like 14.5995 and 120.9842.");
-        if ((k == "DeliveryMaxKm" || k == "DeliveryBaseFee" || k == "DeliveryPerKm" || k == "CodMax") && v != "" && !(decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var nv) && nv >= 0 && nv <= 5000)) return Bad("Delivery range and prices must be numbers (0 or more).");
         await c.ExecuteAsync("INSERT INTO Settings(SettingKey,SettingValue) VALUES(@k,@v) ON DUPLICATE KEY UPDATE SettingValue=@v", new { k, v });
-    }
-    Cfg.Clear(); return Results.Ok(new { ok = true });
-});
-
-admin.MapPost("/settings/payment-qr", async (HttpRequest req, Db db, IWebHostEnvironment env) =>
-{
-    var form = await req.ReadFormAsync(); var show = form["show"].ToString() == "true" ? "1" : "0"; await using var c = db.Open();
-    await c.ExecuteAsync("UPDATE Settings SET SettingValue=@show WHERE SettingKey='ShowPaymentQr'", new { show });
-    var file = form.Files["image"];
-    if (file is { Length: > 0 })
-    {
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant(); if (BadImageExt(ext)) return Bad("Invalid file."); var dir = Path.Combine(env.WebRootPath, "Images"); Directory.CreateDirectory(dir); var fn = $"qr_code{ext}";
-        await using (var fs = File.Create(Path.Combine(dir, fn))) await file.CopyToAsync(fs);
-        await c.ExecuteAsync("UPDATE Settings SET SettingValue=@val WHERE SettingKey='PaymentQrImage'", new { val = "/Images/" + fn });
     }
     return Results.Ok(new { ok = true });
 });
@@ -649,7 +674,7 @@ admin.MapPost("/settings/payment-qr", async (HttpRequest req, Db db, IWebHostEnv
 admin.MapPost("/categories", async (HttpRequest req, Db db, IWebHostEnvironment env) =>
 {
     var form = await req.ReadFormAsync(); var name = form["name"].ToString().Trim(); string? path = null; var file = form.Files["image"];
-    if (file is { Length: > 0 }) { var ext = Path.GetExtension(file.FileName).ToLowerInvariant(); if (BadImageExt(ext)) return Bad("Invalid file."); var dir = Path.Combine(env.WebRootPath, "Icons_and_Buttons"); Directory.CreateDirectory(dir); var fn = $"cat_{Guid.NewGuid():N}{ext}"; await using (var fs = File.Create(Path.Combine(dir, fn))) await file.CopyToAsync(fs); path = "../Icons_and_Buttons/" + fn; }
+    if (file is { Length: > 0 }) { var ext = Path.GetExtension(file.FileName).ToLowerInvariant(); if (BadImageExt(ext) || !await Pics.LooksLikeImageAsync(file)) return Bad("Invalid file."); var dir = Path.Combine(env.WebRootPath, "Icons_and_Buttons"); Directory.CreateDirectory(dir); var fn = $"cat_{Guid.NewGuid():N}{ext}"; await using (var fs = File.Create(Path.Combine(dir, fn))) await file.CopyToAsync(fs); path = "../Icons_and_Buttons/" + fn; }
     if (name.Length < 2 || name.Length > 60) return Bad("Category name must be 2 to 60 characters.");
     using var c = db.Open(); if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Categories WHERE LOWER(Name)=LOWER(@name)", new { name }) > 0) return Conflict("That category already exists.");
     await c.ExecuteAsync("INSERT INTO Categories(Name,ImagePath) VALUES(@name,@path)", new { name, path }); return Results.Ok(new { ok = true });
@@ -699,6 +724,7 @@ admin.MapPost("/bundles", async (BundleNewReq r, Db db) =>
         var same = existing.GroupBy(x => x.BundleId).Any(g => string.Join(",", g.OrderBy(x => x.ProductId).Select(x => x.ProductId + "x" + x.Qty)) == sig);
         if (same) return Results.Conflict(new { error = isBogo ? "A Buy 1 Get 1 for this item is already created." : "A bundle with these exact items already exists.", duplicate = true });
     }
+ 
     var name = Nz(r.Name) ?? (groups.Count == 1 ? (isBogo && r.DiscountPercent == 50 ? "Buy 1 Get 1: " : "Buy " + totalQty + " ") + found[0].Name : string.Join(" + ", found.Select(f => f.Name)));
     if (name.Length > 160) name = name[..160];
     await c.ExecuteAsync("INSERT INTO Bundles(Name,DiscountPercent,IsActive,AutoMade,Kind,Season,StartsAt,EndsAt,Description) VALUES(@name,@pct,1,0,@kind,@bseason,@bsd,@bed,@bdesc)", new { name, pct = r.DiscountPercent, kind, bseason, bsd, bed, bdesc }, tx);
@@ -785,7 +811,7 @@ admin.MapGet("/transactions", async (string? search, string? status, string? sta
     using var c = db.Open();
     var p = new { search = Nz(search), like = "%" + Nz(search) + "%", status, startDate = fromDate, endDate = toDate };
     const string filter = @"(@search IS NULL OR CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) LIKE @like OR o.CustomerName LIKE @like) AND (@startDate IS NULL OR o.CreatedAt >= @startDate) AND (@endDate IS NULL OR o.CreatedAt < @endDate)";
-    var rows = await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.CustomerName AS customer, o.UserId AS userId, o.PaymentMethod AS payment, o.PaymentRef AS paymentRef, o.PickupDate AS pickup, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.DeliveryKm AS deliveryKm, o.LalamoveStatus AS lalamoveStatus, o.LalamoveLink AS lalamoveLink, o.LalamoveDriver AS lalamoveDriver, o.LalamoveCost AS lalamoveCost, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE " + filter + " AND (@status IS NULL OR o.Status = @status) ORDER BY o.OrderId DESC", p);
+    var rows = await c.QueryAsync(@"SELECT o.OrderId AS id, CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0')) AS code, o.CreatedAt AS date, o.CustomerName AS customer, o.UserId AS userId, o.PaymentMethod AS payment, o.PaymentRef AS paymentRef, o.PickupDate AS pickup, o.Total AS total, o.Status AS status, o.FulfillmentType AS fulfillment, o.DeliveryAddress AS address, o.DeliveryPhone AS deliveryPhone, o.DeliveryFee AS deliveryFee, o.Courier AS courier, o.TrackingNo AS trackingNo, o.PaymentStatus AS paymentStatus, o.RefundStatus AS refundStatus, o.RefundReason AS refundReason, o.RefundNote AS refundNote, (o.ItemsConfirmedAt IS NOT NULL) AS itemsConfirmed, o.ReadyAt AS readyAt, o.CompletedAt AS completedAt, o.PaidAt AS paidAt, o.Discount AS discount, o.PromoCode AS promoCode, (SELECT GROUP_CONCAT(CONCAT(oi.ProductName, IF(oi.Size <> '', CONCAT(' (', oi.Size, ')'), ''), IF(oi.Color <> '', CONCAT(' [', oi.Color, ']'), ''), ' x', oi.Qty) SEPARATOR ', ') FROM OrderItems oi WHERE oi.OrderId = o.OrderId) AS items FROM Orders o WHERE " + filter + " AND (@status IS NULL OR o.Status = @status) ORDER BY o.OrderId DESC", p);
     // the four counters follow the same date range and search as the list, so the numbers always match what is on screen
     var summary = await c.QueryFirstAsync(@"SELECT COUNT(*) AS total, IFNULL(SUM(CASE WHEN o.Status='Completed' THEN 1 ELSE 0 END),0) AS completed, IFNULL(SUM(CASE WHEN o.Status='Pending' THEN 1 ELSE 0 END),0) AS pending, IFNULL(SUM(CASE WHEN o.Status='Preparing' THEN 1 ELSE 0 END),0) AS preparing, IFNULL(SUM(CASE WHEN o.Status='Ready' THEN 1 ELSE 0 END),0) AS ready, IFNULL(SUM(CASE WHEN o.Status='Cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM Orders o WHERE " + filter, new { p.search, p.like, p.startDate, p.endDate });
     return Results.Ok(new { summary, rows });
@@ -795,7 +821,7 @@ admin.MapPost("/transactions/walkin", async (WalkinReq r, Db db, ClaimsPrincipal
     if (r.Items == null || r.Items.Count == 0) return Bad("Add items.");
     if (r.Items.Any(i => i.Qty < 1 || i.Qty > 999)) return Bad("Invalid quantity.");
     using var c = db.Open(); using var tx = c.BeginTransaction();
-    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1", new { m = r.PaymentMethod }, tx);
+    var method = await c.QueryFirstOrDefaultAsync<string>("SELECT Label FROM PaymentMethods WHERE MethodCode=@m AND IsOn=1 AND MethodCode NOT IN ('paymongo','paypal')", new { m = r.PaymentMethod }, tx);   // online methods need the customer's own device, so they cannot be rung up as already paid
     if (method is null) return Bad("Invalid payment.");
     var lines = new List<Line>();
     foreach (var g in r.Items.GroupBy(i => new { i.ProductId, Size = (i.Size ?? "").Trim(), Color = (i.Color ?? "").Trim() }))
@@ -806,14 +832,10 @@ admin.MapPost("/transactions/walkin", async (WalkinReq r, Db db, ClaimsPrincipal
         p.Size = size; p.Color = g.Key.Color; p.Qty = g.Sum(x => x.Qty); lines.Add(p);
     }
     var total = lines.Sum(l => l.Price * l.Qty); var cust = Nz(r.CustomerName) ?? "Walk-in";
-    // QR Ph: the sale is saved unpaid (stock is held) and finishes by itself when the customer's scan is paid
-    var qr = r.PaymentMethod == "qrph";
-    if (qr && total < 20m) return Bad("QR payment needs at least ₱20. Use cash for a smaller sale.");
-    await c.ExecuteAsync(qr ? @"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,ItemsConfirmedAt,ItemsConfirmedBy) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Preparing','Unpaid',NOW(),@by)"
-        : @"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,PaidAt,PaymentConfirmedBy,ItemsConfirmedAt,ItemsConfirmedBy,CompletedAt) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Completed','Paid',NOW(),@by,NOW(),@by,NOW())", new { cust, method, total, by = u.Identity?.Name }, tx);
+    await c.ExecuteAsync(@"INSERT INTO Orders(UserId,CustomerName,Channel,PaymentMethod,Discount,Total,Status,PaymentStatus,PaidAt,PaymentConfirmedBy,ItemsConfirmedAt,ItemsConfirmedBy,CompletedAt) VALUES(NULL,@cust,'Walk-in',@method,0,@total,'Completed','Paid',NOW(),@by,NOW(),@by,NOW())", new { cust, method, total, by = u.Identity?.Name }, tx);
     var orderId = await c.ExecuteScalarAsync<int>("SELECT CAST(LAST_INSERT_ID() AS SIGNED)", null, tx);
     var soldOut = await Orders.TakeStock(c, tx, orderId, lines, "Walk-in sale", "WLK-", u.Identity?.Name); if (soldOut != null) return Conflict($"Out of stock: {soldOut}");
-    var orderCode = "WLK-" + orderId.ToString("D6"); tx.Commit(); return Results.Ok(new { orderCode, orderId, total, qr });
+    var orderCode = "WLK-" + orderId.ToString("D6"); tx.Commit(); return Results.Ok(new { orderCode, total });
 });
 admin.MapPut("/transactions/{id:int}/status", async (int id, StatusReq r, Db db, EmailService emailer, ClaimsPrincipal u) =>
 {
@@ -829,7 +851,6 @@ admin.MapPut("/transactions/{id:int}/status", async (int id, StatusReq r, Db db,
     if (r.Status == "Completed" && ol!.PaymentStatus != "Paid") return Conflict("The payment is not recorded yet. Confirm the payment first (online payments are recorded automatically).");
     if (ol!.RefundStatus == "Requested" && r.Status != "Cancelled") return Conflict("The customer asked for a refund. Answer the refund request first.");
     if (r.Status == "Cancelled" && ol.PaymentStatus == "Paid" && ol.RefundStatus != "Refunded") return Conflict("This order is already paid. Cancel it through a refund so the money is returned first.");
-    if (r.Status == "Cancelled" && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE OrderId=@id AND LalamoveStatus IN ('BOOKING','ASSIGNING_DRIVER','ON_GOING','PICKED_UP','MANUAL')", new { id }, tx) > 0) return Conflict("A Lalamove rider is booked for this order. Cancel the booking first (Delivery button), then cancel the order.");
     if (r.Status == "Cancelled") await StockLog.ReturnOrder(c, tx, id, u.Identity?.Name);
     var courier = Nz(r.Courier); var trackNo = Nz(r.TrackingNo); if (courier != null && courier.Length > 60) courier = courier[..60]; if (trackNo != null && trackNo.Length > 60) trackNo = trackNo[..60];
     await c.ExecuteAsync("UPDATE Orders SET Status=@s, Courier=IFNULL(@courier,Courier), TrackingNo=IFNULL(@trackNo,TrackingNo), ReadyAt=IF(@s IN ('Ready','Out for Delivery'),NOW(),ReadyAt), CompletedAt=IF(@s='Completed',NOW(),CompletedAt) WHERE OrderId=@id", new { s = r.Status, id, courier, trackNo }, tx);
@@ -869,7 +890,7 @@ admin.MapGet("/forecast", async (Db db) =>
 admin.MapGet("/reports", async (string? period, string? from, string? to, Db db) =>
 {
     var per = period is "weekly" or "monthly" or "yearly" ? period : "daily";
-    var end = DateTime.TryParse(to, out var t) ? t.Date.AddDays(1) : DateTime.Today.AddDays(1);
+    var end = DateTime.TryParse(to, out var t) ? t.Date.AddDays(1) : Promos.Today.AddDays(1);
     var start = DateTime.TryParse(from, out var f) ? f.Date : end.AddDays(per == "daily" ? -14 : per == "weekly" ? -84 : per == "monthly" ? -365 : -1826);
     if (start >= end) return Bad("The start date must be before the end date.");
     if ((end - start).TotalDays > 3700) return Bad("Pick a range of 10 years or less.");
@@ -891,7 +912,97 @@ admin.MapGet("/reports", async (string? period, string? from, string? to, Db db)
 });
 admin.MapGet("/reviews", async (Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync("SELECT r.ReviewId AS id, r.Rating AS rating, r.Comment AS comment, r.CreatedAt AS date, u.Username AS username, p.Name AS product FROM Reviews r JOIN Users u ON u.UserId=r.UserId JOIN Products p ON p.ProductId=r.ProductId ORDER BY r.ReviewId DESC")); });
 
-admin.MapGet("/promos", async (Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync("SELECT Code AS code, DiscountPercent AS percent, IsActive AS isActive, DATE_FORMAT(StartsAt,'%Y-%m-%d') AS startsAt, DATE_FORMAT(EndsAt,'%Y-%m-%d') AS endsAt, MaxUses AS maxUses, Season AS season, IsPublic AS isPublic, (SELECT COUNT(*) FROM Orders o WHERE o.PromoCode = PromoCodes.Code AND o.Status<>'Cancelled') AS uses FROM PromoCodes ORDER BY Code")); });
+// ---------- withdraw money from the PayMongo wallet to a GCash account (every step needs the admin's 2FA code) ----------
+// Checks the 6-digit code from the admin's authenticator app, exactly like signing in does: the code must be right, must not have been used before, and 5 wrong tries lock it for 10 minutes.
+// Returns null when the code is fine, otherwise the message to show.
+async Task<string?> Check2FaAsync(MySqlConnection c, ClaimsPrincipal u, string? code)
+{
+    var usr = await c.QueryFirstOrDefaultAsync<UserRow>("SELECT UserId,Username,TwoFactorSecret,TwoFactorEnabled,TwoFactorLastStep FROM Users WHERE UserId=@id", new { id = Uid(u) });
+    if (usr is null || !usr.TwoFactorEnabled || string.IsNullOrEmpty(usr.TwoFactorSecret)) return "Turn on two-factor authentication first (My account > Security). Withdrawals need it.";
+    var key = "wd2fa|" + usr.UserId;
+    if (await LoginGuard.IsBlockedAsync(c, key, 5, 10)) return "Too many wrong codes. Try again in 10 minutes.";
+    var totp = new Totp(Base32Encoding.ToBytes(SecretBox.Reveal(usr.TwoFactorSecret)));
+    if (!totp.VerifyTotp((code ?? "").Trim(), out var step, new VerificationWindow(1, 1))) { await LoginGuard.FailAsync(c, key); return "Invalid 2FA code."; }
+    if (step <= usr.TwoFactorLastStep) return "That code was already used. Wait for the next 6-digit code and try again.";
+    await c.ExecuteAsync("UPDATE Users SET TwoFactorLastStep=@step WHERE UserId=@id", new { step, id = usr.UserId });
+    await LoginGuard.ClearAsync(c, key);
+    return null;
+}
+decimal WdMin() => builder.Configuration.GetValue("Withdrawals:Min", 100m); decimal WdMax() => builder.Configuration.GetValue("Withdrawals:Max", 50000m); decimal WdFee() => builder.Configuration.GetValue("Withdrawals:Fee", 10m);
+string Php(decimal v) => "PHP " + v.ToString("N2");
+admin.MapGet("/wallet", async (ClaimsPrincipal u, Db db, PayMongoService pm) =>
+{
+    using var c = db.Open();
+    var (w, err) = await pm.GetWalletAsync();
+    var tf = await c.ExecuteScalarAsync<int>("SELECT TwoFactorEnabled FROM Users WHERE UserId=@id", new { id = Uid(u) }) == 1;
+    var accounts = await c.QueryAsync("SELECT AccountId AS id, AccountName AS name, AccountNumber AS number FROM WithdrawalAccounts ORDER BY AccountId");
+    return Results.Ok(new { ready = pm.IsReady, twoFactor = tf, walletError = err, available = w == null ? (decimal?)null : w.AvailableCentavos / 100m, pending = w == null ? (decimal?)null : w.PendingCentavos / 100m, walletName = w?.AccountName, walletNumber = w?.AccountNumber, accounts, min = WdMin(), max = WdMax(), fee = WdFee() });
+});
+admin.MapPost("/wallet/accounts", async (WalletAcctReq r, ClaimsPrincipal u, Db db, EmailService mail) =>
+{
+    var name = Regex.Replace((r.Name ?? "").Trim(), @"\s+", " "); var number = NormPhone(r.Number);
+    if (!Regex.IsMatch(name, @"^[\p{L}][\p{L} .'-]{1,79}$")) return Bad("Type the name exactly as it appears on the GCash account.");
+    if (number is null) return Bad("Enter the GCash mobile number, like 09171234567.");
+    using var c = db.Open();
+    var bad = await Check2FaAsync(c, u, r.Code); if (bad != null) return Bad(bad);
+    if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM WithdrawalAccounts") >= 5) return Bad("You can save up to 5 GCash accounts. Remove one first.");
+    if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM WithdrawalAccounts WHERE AccountNumber=@number", new { number }) > 0) return Conflict("That GCash number is already saved.");
+    await c.ExecuteAsync("INSERT INTO WithdrawalAccounts(AccountName,AccountNumber,CreatedBy) VALUES(@name,@number,@by)", new { name, number, by = u.Identity?.Name });
+    await Audit.AddAsync(c, u.Identity?.Name, "Withdrawal account added", name + " " + number);
+    var to = await c.ExecuteScalarAsync<string>("SELECT Email FROM Users WHERE UserId=@id", new { id = Uid(u) });
+    if (!string.IsNullOrWhiteSpace(to)) _ = Task.Run(async () => { try { await mail.SendEmailAsync(to, "A GCash account was added for withdrawals", $"<p>The GCash account <b>{System.Net.WebUtility.HtmlEncode(name)}</b> ({number}) was added for withdrawals on your Web-Syscle store. If this was not you, change your password and turn off the admin accounts you do not recognise.</p>"); } catch { } });
+    return Results.Ok(new { ok = true });
+});
+admin.MapDelete("/wallet/accounts/{id:int}", async (int id, ClaimsPrincipal u, Db db) =>
+{
+    using var c = db.Open(); var n = await c.ExecuteAsync("DELETE FROM WithdrawalAccounts WHERE AccountId=@id", new { id });
+    if (n > 0) await Audit.AddAsync(c, u.Identity?.Name, "Withdrawal account removed", "#" + id);
+    return n == 0 ? Results.NotFound(new { error = "Not found." }) : Results.Ok(new { ok = true });
+});
+admin.MapPost("/wallet/withdraw", async (WithdrawReq r, ClaimsPrincipal u, Db db, PayMongoService pm, EmailService mail) =>
+{
+    using var c = db.Open();
+    var bad = await Check2FaAsync(c, u, r.Code); if (bad != null) return Bad(bad);
+    var acct = await c.QueryFirstOrDefaultAsync<WAcct>("SELECT AccountId, AccountName, AccountNumber FROM WithdrawalAccounts WHERE AccountId=@id", new { id = r.AccountId });
+    if (acct is null) return Bad("Choose the GCash account to send the money to.");
+    var amount = Math.Round(r.Amount, 2);
+    if (amount < WdMin() || amount > WdMax()) return Bad($"A withdrawal must be between {Php(WdMin())} and {Php(WdMax())}.");
+    // only one withdrawal at a time, even if two requests arrive together (a database lock covers the check, the record and the call to PayMongo)
+    if (await c.ExecuteScalarAsync<int>("SELECT GET_LOCK('syscle_withdraw', 5)") != 1) return Conflict("Another withdrawal is being processed. Try again in a moment.");
+    try
+    {
+        if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Withdrawals WHERE Status='Pending'") > 0) return Conflict("The last withdrawal has not finished yet. Wait until it shows Succeeded or Failed.");
+        var (w, werr) = await pm.GetWalletAsync(); if (w == null) return Bad(werr ?? "The wallet could not be read.");
+        var available = w.AvailableCentavos / 100m;
+        if (amount + WdFee() > available) return Bad($"Not enough money in the wallet. Available: {Php(available)}. PayMongo also charges about {Php(WdFee())} for each transfer.");
+        var id = await c.ExecuteScalarAsync<int>("INSERT INTO Withdrawals(AccountName,AccountNumber,Amount,Status,RequestedBy) VALUES(@n,@num,@a,'Pending',@by); SELECT LAST_INSERT_ID();", new { n = acct.AccountName, num = acct.AccountNumber, a = amount, by = u.Identity?.Name });
+        var reference = "WD-" + id.ToString("D6"); await c.ExecuteAsync("UPDATE Withdrawals SET Reference=@reference WHERE WithdrawalId=@id", new { reference, id });
+        var (tid, status, err, unknown) = await pm.SendToGcashAsync(w, acct.AccountName, acct.AccountNumber, amount, reference);
+        await c.ExecuteAsync("UPDATE Withdrawals SET Status=@status, TransferId=@tid, Error=@err, UpdatedAt=NOW() WHERE WithdrawalId=@id", new { status, tid, err = err != null && err.Length > 300 ? err[..300] : err, id });
+        await Audit.AddAsync(c, u.Identity?.Name, "Withdrawal " + status.ToLowerInvariant(), $"{reference} {Php(amount)} to {acct.AccountNumber}");
+        if (status == "Failed")
+        {
+            var hint = err != null && (err.Contains("recipient", StringComparison.OrdinalIgnoreCase) || err.Contains("cooling", StringComparison.OrdinalIgnoreCase) || err.Contains("register", StringComparison.OrdinalIgnoreCase)) ? " If PayMongo asks you to register or verify the recipient, do that in your PayMongo dashboard (Wallet > Recipients), wait for its waiting period and try again." : "";
+            return Bad("PayMongo did not send the money: " + err + hint);
+        }
+        var to = await c.ExecuteScalarAsync<string>("SELECT Email FROM Users WHERE UserId=@id", new { id = Uid(u) });
+        if (!string.IsNullOrWhiteSpace(to)) _ = Task.Run(async () => { try { await mail.SendEmailAsync(to, "Withdrawal " + reference, $"<p>A withdrawal of <b>{Php(amount)}</b> to the GCash account {System.Net.WebUtility.HtmlEncode(acct.AccountName)} ({acct.AccountNumber}) was requested on your Web-Syscle store ({reference}). If this was not you, change your password right away and contact PayMongo.</p>"); } catch { } });
+        return Results.Ok(new { ok = true, id, reference, status, unknown, message = unknown ? err : status == "Succeeded" ? $"{Php(amount)} was sent to {acct.AccountName}." : $"{Php(amount)} is on its way to {acct.AccountName}. This page shows when it arrives." });
+    }
+    finally { await c.ExecuteAsync("SELECT RELEASE_LOCK('syscle_withdraw')"); }
+});
+admin.MapGet("/wallet/withdrawals", async (Db db, PayMongoService pm) =>
+{
+    using var c = db.Open();
+    // a transfer that was still on its way last time is checked with PayMongo now
+    foreach (var p in await c.QueryAsync<WdRow>("SELECT WithdrawalId, Status, TransferId FROM Withdrawals WHERE Status='Pending' AND TransferId IS NOT NULL"))
+    {
+        var st = await pm.GetTransferStatusAsync(p.TransferId!);
+        if (st != null && st != "Pending") await c.ExecuteAsync("UPDATE Withdrawals SET Status=@st, UpdatedAt=NOW() WHERE WithdrawalId=@id", new { st, id = p.WithdrawalId });
+    }
+    return Results.Ok(await c.QueryAsync("SELECT WithdrawalId AS id, Reference AS reference, AccountName AS name, AccountNumber AS number, Amount AS amount, Status AS status, Error AS error, RequestedBy AS by, RequestedAt AS at FROM Withdrawals ORDER BY WithdrawalId DESC LIMIT 50"));
+});
+admin.MapGet("/promos", async (Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync("SELECT Code AS code, DiscountPercent AS percent, IsActive AS isActive, DATE_FORMAT(StartsAt,'%Y-%m-%d') AS startsAt, DATE_FORMAT(EndsAt,'%Y-%m-%d') AS endsAt, MaxUses AS maxUses, MaxPerUser AS maxPerUser, Season AS season, IsPublic AS isPublic, (SELECT COUNT(*) FROM Orders o WHERE o.PromoCode = PromoCodes.Code AND o.Status<>'Cancelled') AS uses FROM PromoCodes ORDER BY Code")); });
 admin.MapPost("/promos", async (PromoNewReq r, Db db) =>
 {
     var code = (r.Code ?? "").Trim().ToUpperInvariant();
@@ -901,11 +1012,13 @@ admin.MapPost("/promos", async (PromoNewReq r, Db db) =>
     if (ed != null && sd != null && ed < sd) return Bad("The end date must be on or after the start date.");
     var unlimited = r.Limit == "unlimited"; if (r.Limit == "limited" && r.MaxUses == null) return Bad("Enter how many times the code can be used.");
     if (!unlimited && r.MaxUses is < 1 or > 100000) return Bad("Usage limit must be 1 or more.");
+    var perUserUnlimited = r.PerUserLimit == "unlimited"; var perUser = r.PerUser ?? 1;
+    if (!perUserUnlimited && perUser is < 1 or > 1000) return Bad("Uses per customer must be 1 or more.");
     var season = Nz(r.Season);
     using var c = db.Open();
     if (season != null && !Seasons.Exists(await Seasons.StatesAsync(c), season)) return Bad("Pick a season from the list.");
     if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM PromoCodes WHERE Code=@code", new { code }) > 0) return Conflict("That code already exists.");
-    await c.ExecuteAsync("INSERT INTO PromoCodes(Code,DiscountPercent,IsActive,StartsAt,EndsAt,MaxUses,Season,IsPublic) VALUES(@code,@p,1,@sd,@ed,@mu,@season,@pub)", new { code, p = r.Percent, sd, ed, mu = unlimited ? (int?)null : r.MaxUses, season, pub = r.IsPublic });
+    await c.ExecuteAsync("INSERT INTO PromoCodes(Code,DiscountPercent,IsActive,StartsAt,EndsAt,MaxUses,MaxPerUser,Season,IsPublic) VALUES(@code,@p,1,@sd,@ed,@mu,@mpu,@season,@pub)", new { code, p = r.Percent, sd, ed, mu = unlimited ? (int?)null : r.MaxUses, mpu = perUserUnlimited ? (int?)null : perUser, season, pub = r.IsPublic });
     await Audit.AddAsync(c, null, "Promo code created", code);
     return Results.Ok(new { ok = true });
 });
@@ -914,13 +1027,14 @@ admin.MapPut("/promos/{code}", async (string code, PromoEditReq r, Db db) =>
     if (r.Percent is < 1 or > 90) return Bad("Discount must be 1-90%.");
     using var c = db.Open();
     var ed = Promos.D(r.EndsAt); if (r.MaxUses is < 1 or > 100000) return Bad("Usage limit must be 1 or more.");
-    var n = await c.ExecuteAsync("UPDATE PromoCodes SET IsActive = IFNULL(@act, IsActive), DiscountPercent = IFNULL(@pct, DiscountPercent), EndsAt = IFNULL(@ed, EndsAt), MaxUses = CASE WHEN @lim='unlimited' THEN NULL ELSE IFNULL(@mu, MaxUses) END, IsPublic = IFNULL(@pub, IsPublic) WHERE Code=@code", new { code, act = r.IsActive, pct = r.Percent, ed, mu = r.MaxUses, lim = r.Limit, pub = r.IsPublic });
+    if (r.PerUser is < 1 or > 1000) return Bad("Uses per customer must be 1 or more.");
+    var n = await c.ExecuteAsync("UPDATE PromoCodes SET IsActive = IFNULL(@act, IsActive), DiscountPercent = IFNULL(@pct, DiscountPercent), EndsAt = IFNULL(@ed, EndsAt), MaxUses = CASE WHEN @lim='unlimited' THEN NULL ELSE IFNULL(@mu, MaxUses) END, MaxPerUser = CASE WHEN @plim='unlimited' THEN NULL ELSE IFNULL(@pu, MaxPerUser) END, IsPublic = IFNULL(@pub, IsPublic) WHERE Code=@code", new { code, act = r.IsActive, pct = r.Percent, ed, mu = r.MaxUses, lim = r.Limit, pu = r.PerUser, plim = r.PerUserLimit, pub = r.IsPublic });
     return n == 0 ? Results.NotFound(new { error = "Not found." }) : Results.Ok(new { ok = true });
 });
 admin.MapDelete("/promos/{code}", async (string code, Db db) => { using var c = db.Open(); await c.ExecuteAsync("DELETE FROM PromoCodes WHERE Code=@code", new { code }); return Results.Ok(new { ok = true }); });
 
-admin.MapGet("/payment-methods", async (Db db, PayMongoService pm, PayPalService pp) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync("SELECT MethodCode AS code, Label AS label, IsOn AS isOn, IFNULL(AccountNumber,'') AS accountNumber, IFNULL(AccountName,'') AS accountName, CASE MethodCode WHEN 'paymongo' THEN @pm WHEN 'paypal' THEN @pp ELSE 1 END AS ready FROM PaymentMethods ORDER BY MethodCode", new { pm = pm.IsReady ? 1 : 0, pp = pp.IsReady ? 1 : 0 })); });
-admin.MapPut("/payment-methods", async (List<MethodReq> list, Db db) => { using var c = db.Open(); foreach (var m in list) await c.ExecuteAsync("UPDATE PaymentMethods SET IsOn=@IsOn, AccountNumber=@num, AccountName=@name WHERE MethodCode=@Code", new { m.Code, m.IsOn, num = Nz(m.AccountNumber), name = Nz(m.AccountName) }); return Results.Ok(new { ok = true }); });
+admin.MapGet("/payment-methods", async (Db db, PayMongoService pm, PayPalService pp) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync("SELECT MethodCode AS code, Label AS label, IsOn AS isOn, CASE MethodCode WHEN 'paymongo' THEN @pm WHEN 'paypal' THEN @pp ELSE 1 END AS ready FROM PaymentMethods ORDER BY MethodCode", new { pm = pm.IsReady ? 1 : 0, pp = pp.IsReady ? 1 : 0 })); });
+admin.MapPut("/payment-methods", async (List<MethodReq> list, Db db) => { using var c = db.Open(); foreach (var m in list) await c.ExecuteAsync("UPDATE PaymentMethods SET IsOn=@IsOn WHERE MethodCode=@Code", new { m.Code, m.IsOn }); return Results.Ok(new { ok = true }); });
 
 admin.MapGet("/accounts", async (Db db) => { using var c = db.Open(); return Results.Ok(await c.QueryAsync(@"SELECT UserId AS id, Username AS username, Email AS email, IFNULL(Phone,'') AS phone, Role AS role, Status AS status, IF(Status='Active' AND LastSeen > DATE_SUB(NOW(), INTERVAL 5 MINUTE), 1, 0) AS online, FpRequest AS fpRequest FROM Users ORDER BY Role, Username")); });
 admin.MapPost("/accounts", async (NewAdminReq r, Db db) =>
@@ -945,11 +1059,14 @@ admin.MapPost("/accounts/{id:int}/password", async (int id, PasswordSetReq r, Cl
 admin.MapDelete("/accounts/{id:int}", async (int id, ClaimsPrincipal u, Db db) => { if (id == Uid(u)) return Bad("Can't delete self."); using var c = db.Open(); if (!await CanManage(c, u, id)) return Denied(); await c.ExecuteAsync("DELETE FROM Users WHERE UserId=@id", new { id }); return Results.Ok(new { ok = true }); });
 
 Features.Map(app);
-DeliveryEndpoints.Map(app); QrPay.Map(app);
-Receipts.Map(app);
 app.Run();
 
-record RegisterReq(string? Username, string? Email, string? Password);
+record RegisterReq(string? Username, string? Email, string? Password, string? Phone = null);
+record MessagingTestReq(string? Channel, string? To);
+record WalletAcctReq(string? Name, string? Number, string? Code);
+record WithdrawReq(int AccountId, decimal Amount, string? Code);
+class WAcct { public int AccountId { get; set; } public string AccountName { get; set; } = ""; public string AccountNumber { get; set; } = ""; }
+class WdRow { public int WithdrawalId { get; set; } public string Reference { get; set; } = ""; public string AccountName { get; set; } = ""; public string AccountNumber { get; set; } = ""; public decimal Amount { get; set; } public string Status { get; set; } = ""; public string? TransferId { get; set; } public string? Error { get; set; } public string? RequestedBy { get; set; } public DateTime RequestedAt { get; set; } }
 record LoginReq(string? Login, string? Password);
 record Verify2FAReq(string? Ticket, string? Code);
 record Enable2FAReq(string? Code);
@@ -960,8 +1077,8 @@ record MessageReq(string? Body);
 record PrefsReq(bool EmailNotify);
 record ResetReq(string? Token, string? Password);
 record Disable2FAReq(string? Password, string? Code);
-record PromoNewReq(string? Code, int Percent, string? StartsAt = null, string? EndsAt = null, int? MaxUses = null, string? Season = null, string? Limit = null, bool IsPublic = false);
-record PromoEditReq(bool? IsActive, int? Percent, string? EndsAt = null, int? MaxUses = null, string? Limit = null, bool? IsPublic = null);
+record PromoNewReq(string? Code, int Percent, string? StartsAt = null, string? EndsAt = null, int? MaxUses = null, string? Season = null, string? Limit = null, bool IsPublic = false, int? PerUser = null, string? PerUserLimit = null);
+record PromoEditReq(bool? IsActive, int? Percent, string? EndsAt = null, int? MaxUses = null, string? Limit = null, bool? IsPublic = null, int? PerUser = null, string? PerUserLimit = null);
 record FeatReq(bool Featured);
 record ProfileReq(string? Email, string? Phone);
 record PasswordReq(string? Current, string? Next);
@@ -970,7 +1087,7 @@ record VariantReq(string? ColorName, string? ImagePath);
 record CartReq(int ProductId, int Qty, string? Size, string? Color);
 record QtyReq(int Qty, string? Size, string? Color);
 record PromoReq(string? Code);
-record CheckoutReq(DateTime? PickupDate, string? PromoCode, string? PaymentMethod, string? PaymentRef = null, string? Fulfillment = null, string? Address = null, string? Phone = null, double? Lat = null, double? Lng = null);
+record CheckoutReq(DateTime? PickupDate, string? PromoCode, string? PaymentMethod, string? PaymentRef = null, string? Fulfillment = null, string? Address = null, string? Phone = null);
 record ItemReq(int ProductId, int Qty, string? Size, string? Color);
 record WalkinReq(string? CustomerName, string? PaymentMethod, List<ItemReq>? Items);
 record StatusReq(string? Status, string? Courier = null, string? TrackingNo = null);
@@ -990,7 +1107,14 @@ class UserRow { public int UserId { get; set; } public string Username { get; se
 class KV { public string K { get; set; } = ""; public string V { get; set; } = ""; }
 class SessionRow { public string Role { get; set; } = ""; public string Status { get; set; } = ""; public int SessionVersion { get; set; } public int IdleFor { get; set; } }
 class Line { public int ProductId { get; set; } public string Name { get; set; } = ""; public decimal Price { get; set; } public int Qty { get; set; } public string Size { get; set; } = ""; public string Color { get; set; } = ""; }
-class Db { private readonly string _cs; public Db(string cs) { _cs = cs; } public MySqlConnection Open() { var c = new MySqlConnection(_cs); c.Open(); return c; } }
+class Db { private readonly string _cs; public Db(string cs) { _cs = cs; } public MySqlConnection Open()
+    {
+        var c = new MySqlConnection(_cs); c.Open();
+        // Every date the database writes with NOW() and every day the reports group by is in shop time (Philippines, UTC+8), the same clock the app uses in Promos.Today.
+        // Without this a database running in UTC (the default in Docker and on most hosts) files sales made between midnight and 8 AM under the previous day.
+        using (var cmd = c.CreateCommand()) { cmd.CommandText = "SET time_zone='" + Promos.SqlOffset + "'"; cmd.ExecuteNonQuery(); }
+        return c;
+    } }
 class BundleRow { public string? Description { get; set; } public string? ImagePath { get; set; } public int BundleId { get; set; } public string Name { get; set; } = ""; public int DiscountPercent { get; set; } public bool IsActive { get; set; } public bool AutoMade { get; set; } public DateTime? StartsAt { get; set; } public DateTime? EndsAt { get; set; } public string? Season { get; set; } public string Kind { get; set; } = "Bundle"; }
 class BundleItemRow { public int BundleId { get; set; } public int ProductId { get; set; } public string Name { get; set; } = ""; public decimal Price { get; set; } public int Stock { get; set; } public string? Image { get; set; } public int Qty { get; set; } public string? Sizes { get; set; } public string? Description { get; set; } public string? Specs { get; set; } public string? FitTags { get; set; } }
 class BundleStock { public int ProductId { get; set; } public int Qty { get; set; } public int Stock { get; set; } public string Name { get; set; } = ""; public string? Sizes { get; set; } }
@@ -1006,22 +1130,30 @@ class ProductRow { public bool featured { get; set; } public double? rating { ge
 class AdminProductRow : ProductRow { public decimal? costPrice { get; set; } }
 class VariantRow { public int id { get; set; } public int productId { get; set; } public string colorName { get; set; } = ""; public string? image { get; set; } }
 
-class PromoRow { public string? Season { get; set; } public int Percent { get; set; } public DateTime? StartsAt { get; set; } public DateTime? EndsAt { get; set; } public int? MaxUses { get; set; } }
+class PromoRow { public string? Season { get; set; } public int Percent { get; set; } public DateTime? StartsAt { get; set; } public DateTime? EndsAt { get; set; } public int? MaxUses { get; set; } public int? MaxPerUser { get; set; } }
 class MoverRow { public int ProductId { get; set; } public string Name { get; set; } = ""; public string ItemType { get; set; } = ""; public int Stock { get; set; } public decimal Price { get; set; } public decimal Sold { get; set; } public DateTime? LastSold { get; set; } public DateTime? AddedAt { get; set; } public bool Featured { get; set; } }
 class DayRow { public DateTime Day { get; set; } public decimal Sales { get; set; } }
 static class Promos
 {
-    public static DateTime Today => DateTime.UtcNow.AddHours(8).Date; // shop time (Philippines)
+    public const string SqlOffset = "+08:00";   // shop time (Philippines, no daylight saving); keep in step with the AddHours(8) below
+    public static DateTime Now => DateTime.UtcNow.AddHours(8);
+    public static DateTime Today => Now.Date; // shop time (Philippines)
     public static DateTime? D(string? s) => DateTime.TryParse(s, out var d) ? d.Date : null;
     public static string Window(DateTime? s, DateTime? e) => s != null && Today < s.Value.Date ? "Scheduled" : e != null && Today > e.Value.Date ? "Expired" : "Live";
-    public static async Task<(int? pct, string? err)> Check(MySqlConnection c, string code, MySqlTransaction? tx)
+    public static async Task<(int? pct, string? err)> Check(MySqlConnection c, string code, MySqlTransaction? tx, int? userId = null)
     {
-        var p = await c.QueryFirstOrDefaultAsync<PromoRow>("SELECT DiscountPercent AS Percent, StartsAt, EndsAt, MaxUses, Season FROM PromoCodes WHERE Code=@code AND IsActive=1", new { code }, tx);
+        var p = await c.QueryFirstOrDefaultAsync<PromoRow>("SELECT DiscountPercent AS Percent, StartsAt, EndsAt, MaxUses, MaxPerUser, Season FROM PromoCodes WHERE Code=@code AND IsActive=1", new { code }, tx);
         if (p is null) return (null, "Invalid code.");
         if (p.StartsAt != null && Today < p.StartsAt.Value.Date) return (null, "This code starts on " + p.StartsAt.Value.ToString("MMM d, yyyy") + ".");
         if (p.EndsAt != null && Today > p.EndsAt.Value.Date) return (null, "This code has expired.");
         if (p.Season != null) { var (live, why) = Seasons.Check(await Seasons.StatesAsync(c, tx), p.Season); if (!live) return (null, why ?? "This code is out of season."); }
         if (p.MaxUses != null && await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE PromoCode=@code AND Status<>'Cancelled'", new { code }, tx) >= p.MaxUses) return (null, "This code has reached its usage limit.");
+        // one customer can only use a code as many times as the admin allowed (cancelled orders do not count)
+        if (p.MaxPerUser != null && userId != null)
+        {
+            var mine = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Orders WHERE PromoCode=@code AND UserId=@userId AND Status<>'Cancelled'", new { code, userId }, tx);
+            if (mine >= p.MaxPerUser) return (null, p.MaxPerUser == 1 ? "You have already used this code. It can only be used once per customer." : $"You have already used this code {p.MaxPerUser} times, which is the most one customer can use.");
+        }
         return (p.Percent, null);
     }
 }
@@ -1029,7 +1161,7 @@ static class Insights
 {
     public static async Task<List<MoverRow>> LoadAsync(MySqlConnection c, int days)
     {
-        var since = DateTime.Today.AddDays(-days);
+        var since = Promos.Today.AddDays(-days);
         return (await c.QueryAsync<MoverRow>(@"SELECT p.ProductId, p.Name, p.ItemType, p.Stock, p.Price, p.AddedAt, p.IsFeatured AS Featured,
             IFNULL((SELECT SUM(oi.Qty) FROM OrderItems oi JOIN Orders o ON o.OrderId=oi.OrderId WHERE oi.ProductId=p.ProductId AND o.Status<>'Cancelled' AND o.RefundStatus<>'Refunded' AND o.CreatedAt>=@since),0) AS Sold,
             (SELECT MAX(o.CreatedAt) FROM OrderItems oi JOIN Orders o ON o.OrderId=oi.OrderId WHERE oi.ProductId=p.ProductId AND o.Status<>'Cancelled') AS LastSold
@@ -1042,8 +1174,8 @@ static class Insights
         var res = new List<dynamic>();
         foreach (var r in rows)
         {
-            var perDay = (double)r.Sold / days; var last = r.LastSold ?? r.AddedAt ?? DateTime.Now; var idle = Math.Max(0, (int)(DateTime.Now - last).TotalDays);
-            var isNew = r.AddedAt != null && (DateTime.Now - r.AddedAt.Value).TotalDays < days;
+            var perDay = (double)r.Sold / days; var last = r.LastSold ?? r.AddedAt ?? Promos.Now; var idle = Math.Max(0, (int)(Promos.Now - last).TotalDays);
+            var isNew = r.AddedAt != null && (Promos.Now - r.AddedAt.Value).TotalDays < days;
             var status = (double)r.Sold >= cut && r.Sold > 0 ? "Fast" : r.Stock > 0 && r.Sold <= 1 && !(isNew && r.Sold == 0) ? "Slow" : isNew && r.Sold == 0 ? "New" : "Normal";
             res.Add(new { id = r.ProductId, name = r.Name, itemType = r.ItemType, stock = r.Stock, price = r.Price, sold = r.Sold, perDay = Math.Round(perDay, 2), daysLeft = perDay > 0 ? (int?)Math.Round(r.Stock / perDay) : null, idleDays = idle, lastSold = r.LastSold?.ToString("yyyy-MM-dd"), featured = r.Featured, status });
         }
@@ -1127,10 +1259,20 @@ static class Sizing
 
 static class Pics
 {
+    // Checks the first bytes of the file (JPEG, PNG or WebP) instead of trusting the file name, so a renamed document or script cannot be uploaded as a picture.
+    public static async Task<bool> LooksLikeImageAsync(IFormFile f)
+    {
+        var h = new byte[12]; await using var s = f.OpenReadStream();
+        if (await s.ReadAtLeastAsync(h, 12, false) < 12) return false;
+        bool jpg = h[0] == 0xFF && h[1] == 0xD8 && h[2] == 0xFF;
+        bool png = h[0] == 0x89 && h[1] == 0x50 && h[2] == 0x4E && h[3] == 0x47;
+        bool webp = h[0] == 0x52 && h[1] == 0x49 && h[2] == 0x46 && h[3] == 0x46 && h[8] == 0x57 && h[9] == 0x45 && h[10] == 0x42 && h[11] == 0x50;
+        return jpg || png || webp;
+    }
     public static async Task<(string? path, string? error)> SaveAsync(HttpRequest req, string webRoot, string folder, string prefix, long maxBytes)
     {
         var form = await req.ReadFormAsync(); var file = form.Files["image"]; if (file is null || file.Length == 0) return (null, "Choose pic.");
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant(); if (!new[] { ".jpg", ".jpeg", ".png", ".webp" }.Contains(ext) || file.Length > maxBytes) return (null, "Invalid file.");
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant(); if (!new[] { ".jpg", ".jpeg", ".png", ".webp" }.Contains(ext) || file.Length > maxBytes || !await LooksLikeImageAsync(file)) return (null, "Invalid file.");
         var dir = Path.Combine(webRoot, folder); Directory.CreateDirectory(dir); var fn = $"{prefix}_{Guid.NewGuid():N}{ext}"; await using (var fs = File.Create(Path.Combine(dir, fn))) await file.CopyToAsync(fs);
         return ("/" + folder + "/" + fn, null);
     }
@@ -1193,7 +1335,9 @@ static class Gate
 static class Pw
 {
     public static readonly string Dummy = Hash("not-a-real-password");
-    public static string Hash(string pw) { var salt = RandomNumberGenerator.GetBytes(16); var h = Rfc2898DeriveBytes.Pbkdf2(pw, salt, 100_000, HashAlgorithmName.SHA256, 32); return $"v1.100000.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(h)}"; }
+    public const int Iterations = 600_000;   // current OWASP guidance for PBKDF2-HMAC-SHA256. Old hashes keep working (their own count is stored inside them) and are upgraded the next time that person signs in.
+    public static string Hash(string pw) { var salt = RandomNumberGenerator.GetBytes(16); var h = Rfc2898DeriveBytes.Pbkdf2(pw, salt, Iterations, HashAlgorithmName.SHA256, 32); return $"v1.{Iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(h)}"; }
+    public static bool NeedsRehash(string stored) { var p = stored.Split('.'); return p.Length == 4 && int.TryParse(p[1], out var n) && n < Iterations; }
     public static bool Verify(string pw, string stored) { var p = stored.Split('.'); if (p.Length != 4) return false; var salt = Convert.FromBase64String(p[2]); var expected = Convert.FromBase64String(p[3]); var h = Rfc2898DeriveBytes.Pbkdf2(pw, salt, int.Parse(p[1]), HashAlgorithmName.SHA256, expected.Length); return CryptographicOperations.FixedTimeEquals(h, expected); }
 }
 
@@ -1207,7 +1351,7 @@ static class Auth
             using var c = db.Open();
             s = await c.QueryFirstOrDefaultAsync<SessionRow>("SELECT Role, Status, SessionVersion, TIMESTAMPDIFF(SECOND, IFNULL(LastActive, NOW()), NOW()) AS IdleFor FROM Users WHERE UserId=@uid", new { uid });
             await c.ExecuteAsync("UPDATE Users SET LastSeen = NOW() WHERE UserId=@uid AND (LastSeen IS NULL OR LastSeen < DATE_SUB(NOW(), INTERVAL 1 MINUTE))", new { uid });
-            if (ctx.Scheme.Name == Schemes.Admin) idleLimit = await Cfg.IntAsync(c, "AdminIdleSeconds", 30, 3600) + 20;   // +20 s grace: the page timer signs out first, the server only catches closed tabs. Without it a slow click on a link signed the admin out
+            if (ctx.Scheme.Name == Schemes.Admin) idleLimit = await Cfg.IntAsync(c, "AdminIdleSeconds", 30, 3600);
         }
         string? why = null;
         if (s is null) why = "gone";
@@ -1238,28 +1382,138 @@ public class PayMongoService
         h.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(Secret + ":")));
         return h;
     }
-    // Creates a PayMongo hosted checkout page for one order. The customer pays there with GCash, Maya or a card.
+    // The ways to pay offered on the PayMongo page. "qrph" shows a QR code made for this order's exact total. PayMongo only accepts methods that are switched on in your PayMongo
+    // dashboard, so if QR Ph is not active on your account yet, set PayMongo__Methods to "gcash,paymaya,card" until it is.
+    static readonly string[] KnownMethods = { "qrph", "gcash", "paymaya", "card", "grab_pay", "dob", "dob_ubp", "brankas_bdo", "brankas_landbank", "brankas_metrobank", "billease", "atome" };
+    string[] Methods
+    {
+        get
+        {
+            var asked = (_config["PayMongo:Methods"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(x => x.ToLowerInvariant()).Where(x => KnownMethods.Contains(x)).Distinct().ToArray();
+            return asked.Length > 0 ? asked : new[] { "qrph", "gcash", "paymaya", "card" };
+        }
+    }
+    // Creates a PayMongo hosted checkout page for one order. The customer pays there by scanning a QR code made for the order total, or with GCash, Maya or a card.
     public async Task<(string? id, string? url, string? err)> CreateSessionAsync(string orderCode, int orderId, decimal total, string successUrl, string cancelUrl)
     {
         if (!IsReady) return (null, null, "Online payment is not set up.");
         try
         {
-            var body = new { data = new { attributes = new {
+            object Body(string[] methods) => new { data = new { attributes = new {
                 send_email_receipt = false, show_description = true, show_line_items = true, description = "Web-Syscle order " + orderCode, reference_number = orderCode,
                 line_items = new[] { new { currency = "PHP", amount = (int)Math.Round(total * 100m), name = "Order " + orderCode, quantity = 1 } },
-                payment_method_types = (_config["PayMongo:QrPh"] ?? "").ToLowerInvariant() == "true" ? new[] { "gcash", "paymaya", "card", "qrph" } : new[] { "gcash", "paymaya", "card" }, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
-            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", body); var text = await res.Content.ReadAsStringAsync();
+                payment_method_types = methods, success_url = successUrl, cancel_url = cancelUrl, metadata = new { orderId = orderId.ToString() } } } };
+            using var http = Client(); var res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", Body(Methods)); var text = await res.Content.ReadAsStringAsync();
             if (!res.IsSuccessStatusCode)
             {
-                Console.WriteLine("[Syscle] PayMongo answered " + (int)res.StatusCode + ": " + (text.Length > 300 ? text[..300] : text));
-                // PayMongo says what is wrong (for example "amount must be at least 20 pesos"): show that so a test is easy to fix
-                string? why = null; try { using var ed = JsonDocument.Parse(text); why = ed.RootElement.GetProperty("errors")[0].GetProperty("detail").GetString(); } catch { }
-                return (null, null, "PayMongo could not open the payment page" + (string.IsNullOrWhiteSpace(why) ? "." : ": " + (why.Length > 160 ? why[..160] : why)));
+                Console.WriteLine("[Syscle] PayMongo answered " + (int)res.StatusCode + " for the methods [" + string.Join(",", Methods) + "]: " + (text.Length > 300 ? text[..300] : text));
+                // PayMongo refuses a method that is not switched on for the account (for example QR Ph or online banking before they are activated). Customers must still be able to pay, so try again with the basics.
+                var basic = new[] { "card", "gcash", "paymaya" };
+                if (res.StatusCode == System.Net.HttpStatusCode.BadRequest && !Methods.All(m => basic.Contains(m)))
+                {
+                    res = await http.PostAsJsonAsync("https://api.paymongo.com/v1/checkout_sessions", Body(basic)); text = await res.Content.ReadAsStringAsync();
+                    if (res.IsSuccessStatusCode) Console.WriteLine("[Syscle] Used card, GCash and Maya only. Activate the other methods in your PayMongo dashboard (Settings > Payment methods) to offer them.");
+                }
+                if (!res.IsSuccessStatusCode) { Console.WriteLine("[Syscle] PayMongo answered " + (int)res.StatusCode + ": " + (text.Length > 300 ? text[..300] : text)); return (null, null, "The payment page could not be opened. Try again or choose another method."); }
             }
             using var doc = JsonDocument.Parse(text); var data = doc.RootElement.GetProperty("data");
             return (data.GetProperty("id").GetString(), data.GetProperty("attributes").GetProperty("checkout_url").GetString(), null);
         }
         catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo error: " + ex.Message); return (null, null, "The payment page could not be opened. Try again or choose another method."); }
+    }
+    // ---------- PayMongo Wallet: read the balance and send money to a GCash account ----------
+    public record WalletInfo(string AccountNumber, string AccountName, string Bic, long AvailableCentavos, long PendingCentavos);
+    static JsonElement? Find(JsonElement e, string name)   // first property with this name, searched through the whole reply (PayMongo nests things under data / attributes)
+    {
+        if (e.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var p in e.EnumerateObject()) if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+            foreach (var p in e.EnumerateObject()) { var f = Find(p.Value, name); if (f != null) return f; }
+        }
+        else if (e.ValueKind == JsonValueKind.Array) foreach (var i in e.EnumerateArray()) { var f = Find(i, name); if (f != null) return f; }
+        return null;
+    }
+    static long? Num(JsonElement? e) => e is { ValueKind: JsonValueKind.Number } n && n.TryGetInt64(out var v) ? v : e is { ValueKind: JsonValueKind.String } s && long.TryParse(s.GetString(), out var w) ? w : null;
+    static string? Str(JsonElement? e) => e is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;
+    static string ErrText(string text) { try { using var d = JsonDocument.Parse(text); var det = Str(Find(d.RootElement, "detail")); if (!string.IsNullOrWhiteSpace(det)) return det!; } catch { } return text.Length > 200 ? text[..200] : text; }
+    static string MapStatus(string? s) { var x = (s ?? "").ToLowerInvariant(); return x.Contains("succe") || x.Contains("complete") || x == "paid" ? "Succeeded" : x.Contains("fail") || x.Contains("reject") || x.Contains("return") || x.Contains("cancel") || x.Contains("expire") ? "Failed" : "Pending"; }
+
+    // The store's PayMongo wallet: how much money is in it, and which account sends the money out.
+    public async Task<(WalletInfo? wallet, string? err)> GetWalletAsync()
+    {
+        if (!IsReady) return (null, "PayMongo is not connected yet. Add PayMongo__SecretKey and restart the site.");
+        try
+        {
+            using var http = Client(); var id = (_config["PayMongo:WalletId"] ?? "").Trim();
+            var res = await http.GetAsync("https://api.paymongo.com/v2/wallets" + (id.Length > 0 ? "/" + Uri.EscapeDataString(id) : "")); var text = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode) { Console.WriteLine("[Syscle] PayMongo wallet answered " + (int)res.StatusCode + ": " + (text.Length > 300 ? text[..300] : text)); return (null, "PayMongo would not show the wallet: " + ErrText(text) + " (the PayMongo account needs an activated Wallet)."); }
+            using var doc = JsonDocument.Parse(text); var w = doc.RootElement;
+            if (Find(w, "data") is { ValueKind: JsonValueKind.Array } list && list.GetArrayLength() > 0) w = list[0];
+            var avail = Num(Find(w, "available_balance")) ?? Num(Find(w, "available")) ?? Num(Find(w, "balance"));
+            var pend = Num(Find(w, "pending_balance")) ?? Num(Find(w, "pending")) ?? 0;
+            var src = Find(w, "source_account");
+            string? number = Str(src is { } s1 ? Find(s1, "number") : null) ?? Str(Find(w, "account_number")), name = Str(src is { } s2 ? Find(s2, "name") : null) ?? Str(Find(w, "account_name"));
+            var cn = _config["PayMongo:WalletAccountNumber"]; var cname = _config["PayMongo:WalletAccountName"];
+            if (!string.IsNullOrWhiteSpace(cn)) number = cn.Trim(); if (!string.IsNullOrWhiteSpace(cname)) name = cname.Trim();   // settings win when the admin filled them in
+            var bic = Str(src is { } s3 ? Find(s3, "bic") : null) ?? "PAEYPHM2XXX";
+            if (avail == null || string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(name))
+            { Console.WriteLine("[Syscle] Could not read the PayMongo wallet reply: " + (text.Length > 300 ? text[..300] : text)); return (null, "The wallet reply from PayMongo could not be read. Set PayMongo__WalletAccountNumber and PayMongo__WalletAccountName (shown in your PayMongo dashboard under Wallet), restart, and try again."); }
+            return (new WalletInfo(number!, name!, bic, avail.Value, pend), null);
+        }
+        catch (Exception ex) { Console.WriteLine("[Syscle] PayMongo wallet error: " + ex.Message); return (null, "PayMongo could not be reached right now. Try again in a moment."); }
+    }
+    string? _gcashBic;
+    // GCash's bank code in PayMongo's list of InstaPay receivers (found once, then remembered).
+    async Task<string> GcashBicAsync()
+    {
+        if (_gcashBic != null) return _gcashBic;
+        string? found = null;
+        void Walk(JsonElement e)
+        {
+            if (found != null) return;
+            if (e.ValueKind == JsonValueKind.Object)
+            {
+                string? P(string n) => e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+                var nm = P("name") ?? P("display_name") ?? P("description"); var code = P("provider_code") ?? P("bic") ?? P("code");
+                if (nm != null && code != null && (nm.Contains("gcash", StringComparison.OrdinalIgnoreCase) || nm.Contains("g-xchange", StringComparison.OrdinalIgnoreCase) || nm.Contains("gxchange", StringComparison.OrdinalIgnoreCase))) { found = code; return; }
+                foreach (var p in e.EnumerateObject()) Walk(p.Value);
+            }
+            else if (e.ValueKind == JsonValueKind.Array) foreach (var i in e.EnumerateArray()) Walk(i);
+        }
+        try { using var http = Client(); var text = await http.GetStringAsync("https://api.paymongo.com/v1/wallets/receiving_institutions?provider=instapay"); using var doc = JsonDocument.Parse(text); Walk(doc.RootElement); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Could not load PayMongo's receiving banks: " + ex.Message); }
+        return _gcashBic = found ?? "GXCHPHM2XXX";
+    }
+    // Sends money from the wallet to a GCash account. "unknown" = PayMongo may or may not have received the request: the caller must NOT send it again.
+    public async Task<(string? id, string status, string? err, bool unknown)> SendToGcashAsync(WalletInfo w, string accountName, string accountNumber, decimal amount, string reference)
+    {
+        try
+        {
+            var bic = await GcashBicAsync();
+            var body = new { transfers = new[] { new {
+                source_account = new { number = w.AccountNumber, name = w.AccountName, bic = w.Bic },
+                destination_account = new { number = accountNumber, name = accountName, bic },
+                amount = (long)Math.Round(amount * 100m), currency = "PHP", provider = "instapay", description = "Web-Syscle withdrawal " + reference, reference_number = reference } } };
+            using var http = Client(); HttpResponseMessage res;
+            try { res = await http.PostAsJsonAsync("https://api.paymongo.com/v2/batch_transfers", body); }
+            catch (Exception ex) { Console.WriteLine("[Syscle] Withdrawal " + reference + ": no answer from PayMongo: " + ex.Message); return (null, "Pending", "PayMongo did not answer. Check the PayMongo dashboard (Wallet > Transactions) before trying again, because the money may already be on its way.", true); }
+            var text = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode)
+            {
+                Console.WriteLine("[Syscle] Withdrawal " + reference + ": PayMongo answered " + (int)res.StatusCode + ": " + (text.Length > 300 ? text[..300] : text));
+                if ((int)res.StatusCode >= 500) return (null, "Pending", "PayMongo had a problem. Check the PayMongo dashboard (Wallet > Transactions) before trying again, because the money may already be on its way.", true);
+                return (null, "Failed", ErrText(text), false);
+            }
+            using var doc = JsonDocument.Parse(text); var tr = Find(doc.RootElement, "transfers") is { ValueKind: JsonValueKind.Array } arr && arr.GetArrayLength() > 0 ? arr[0] : doc.RootElement;
+            return (Str(Find(tr, "id")), MapStatus(Str(Find(tr, "status"))), null, false);
+        }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Withdrawal " + reference + " error: " + ex.Message); return (null, "Pending", "Something went wrong while sending. Check the PayMongo dashboard (Wallet > Transactions) before trying again.", true); }
+    }
+    // Asks PayMongo how a transfer ended up (null = could not find out).
+    public async Task<string?> GetTransferStatusAsync(string transferId)
+    {
+        try { using var http = Client(); var text = await http.GetStringAsync("https://api.paymongo.com/v2/transfers/" + Uri.EscapeDataString(transferId)); using var doc = JsonDocument.Parse(text); var st = Str(Find(doc.RootElement, "status")); return st == null ? null : MapStatus(st); }
+        catch (Exception ex) { Console.WriteLine("[Syscle] Could not read transfer " + transferId + ": " + ex.Message); return null; }
     }
     // Asks PayMongo whether a checkout session has been paid.
     public async Task<bool> IsPaidAsync(string sessionId)
@@ -1374,6 +1628,7 @@ public class EmailService
     private readonly IConfiguration _config;
     public EmailService(IConfiguration config) { _config = config; }
     public bool IsReady => !string.IsNullOrWhiteSpace(_config["EmailSettings:SmtpHost"]) || RealSendGridKey();
+    public string? Via => !string.IsNullOrWhiteSpace(_config["EmailSettings:SmtpHost"]) ? "SMTP" : RealSendGridKey() ? "SendGrid" : null;
     bool RealSendGridKey() { var k = _config["EmailSettings:SendGridApiKey"]; return !string.IsNullOrWhiteSpace(k) && k.StartsWith("SG.") && !k.Contains("PASTE"); }
     // Two ways to send: SMTP (for example a Gmail App Password) or SendGrid. Returns false when neither is set up or the send failed.
     public async Task<bool> SendEmailAsync(string toEmail, string subject, string htmlContent)
@@ -1386,8 +1641,8 @@ public class EmailService
             var smtpUser = _config["EmailSettings:SmtpUser"];
             msg.From.Add(new MimeKit.MailboxAddress(senderName, string.IsNullOrWhiteSpace(senderEmail) ? smtpUser : senderEmail));
             msg.To.Add(MimeKit.MailboxAddress.Parse(toEmail)); msg.Subject = subject; msg.Body = new MimeKit.BodyBuilder { HtmlBody = htmlContent }.ToMessageBody();
-            using var smtp = new MailKit.Net.Smtp.SmtpClient();
-            await smtp.ConnectAsync(host, _config.GetValue("EmailSettings:SmtpPort", 587), MailKit.Security.SecureSocketOptions.StartTls);
+            using var smtp = new MailKit.Net.Smtp.SmtpClient { Timeout = 15000 };
+            await smtp.ConnectAsync(host, _config.GetValue("EmailSettings:SmtpPort", 587), MailKit.Security.SecureSocketOptions.Auto);   // Auto: port 587 uses STARTTLS, port 465 uses SSL
             if (!string.IsNullOrEmpty(smtpUser)) await smtp.AuthenticateAsync(smtpUser, _config["EmailSettings:SmtpPassword"]);
             await smtp.SendAsync(msg); await smtp.DisconnectAsync(true);
             return true;
@@ -1397,6 +1652,7 @@ public class EmailService
             var client = new SendGridClient(_config["EmailSettings:SendGridApiKey"]);
             var m = MailHelper.CreateSingleEmail(new EmailAddress(senderEmail, senderName), new EmailAddress(toEmail), subject, "", htmlContent);
             var res = await client.SendEmailAsync(m);
+            if (!res.IsSuccessStatusCode) { var body = await res.Body.ReadAsStringAsync(); Console.WriteLine("[Syscle] SendGrid answered " + (int)res.StatusCode + ": " + (body.Length > 300 ? body[..300] : body) + "  (the sender address must be verified in SendGrid)"); }
             return res.IsSuccessStatusCode;
         }
         return false;
@@ -1473,9 +1729,6 @@ static class Seed
         await AddColumn(c, "Orders", "DeliveryFee", "DECIMAL(10,2) NOT NULL DEFAULT 0");
         await AddColumn(c, "Orders", "Courier", "VARCHAR(60) NULL");
         await AddColumn(c, "Orders", "TrackingNo", "VARCHAR(60) NULL");
-        await AddColumn(c, "Orders", "DeliveryLat", "DECIMAL(9,6) NULL"); await AddColumn(c, "Orders", "DeliveryLng", "DECIMAL(9,6) NULL"); await AddColumn(c, "Orders", "DeliveryKm", "DECIMAL(6,1) NULL");
-        await AddColumn(c, "Orders", "LalamoveOrderId", "VARCHAR(40) NULL"); await AddColumn(c, "Orders", "LalamoveStatus", "VARCHAR(20) NULL"); await AddColumn(c, "Orders", "LalamoveLink", "VARCHAR(400) NULL");
-        await AddColumn(c, "Orders", "LalamoveDriver", "VARCHAR(120) NULL"); await AddColumn(c, "Orders", "LalamoveCost", "DECIMAL(10,2) NULL"); await AddColumn(c, "Orders", "LalamoveCheckedAt", "DATETIME NULL");
         bool hadPaid = await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='Orders' AND COLUMN_NAME='PaymentStatus'") > 0;
         await AddColumn(c, "Orders", "PaymentStatus", "VARCHAR(10) NOT NULL DEFAULT 'Unpaid'");
         await AddColumn(c, "Orders", "PaidAt", "DATETIME NULL");
@@ -1493,19 +1746,20 @@ static class Seed
         await AddColumn(c, "Orders", "RefundNote", "VARCHAR(300) NULL");
         if (!hadPaid) await c.ExecuteAsync("UPDATE Orders SET PaymentStatus='Paid', PaidAt=IFNULL(PaidAt,CreatedAt), ItemsConfirmedAt=IFNULL(ItemsConfirmedAt,CreatedAt), CompletedAt=IFNULL(CompletedAt,CreatedAt) WHERE Status='Completed'");
         await AddColumn(c, "OrderItems", "UnitCost", "DECIMAL(10,2) NULL");
+        // Online payments now all go through PayMongo (QR Ph, GCash, Maya, card): the manual GCash method and the fixed payment QR are retired. Past orders keep their "GCash" label in the history.
+        await c.ExecuteAsync("DELETE FROM PaymentMethods WHERE MethodCode='gcash'");
+        await c.ExecuteAsync("DELETE FROM Settings WHERE SettingKey IN ('ShowPaymentQr','PaymentQrImage')");
+        await c.ExecuteAsync("DELETE FROM PaymentMethods WHERE MethodCode='paypal'");   // every online payment now goes through PayMongo; past PayPal orders keep their label in the history
+        await c.ExecuteAsync("UPDATE Orders SET PaymentMethod='QR, GCash, Maya or card (online)' WHERE PaymentMethod='GCash / Maya / Card (online)'");   // the order's label must keep matching the method's label
+        await c.ExecuteAsync("UPDATE PaymentMethods SET Label='QR, GCash, Maya or card (online)' WHERE MethodCode='paymongo' AND Label='GCash / Maya / Card (online)'");
         // Promos and bundles
         await AddColumn(c, "PromoCodes", "StartsAt", "DATE NULL"); await AddColumn(c, "PromoCodes", "EndsAt", "DATE NULL");
         await AddColumn(c, "PromoCodes", "MaxUses", "INT NULL"); await AddColumn(c, "PromoCodes", "Season", "VARCHAR(30) NULL");
         await AddColumn(c, "PromoCodes", "IsPublic", "TINYINT(1) NOT NULL DEFAULT 0");
+        await AddColumn(c, "PromoCodes", "MaxPerUser", "INT NULL");   // how many times ONE customer may use the code (empty = no limit per customer)
         await AddColumn(c, "Bundles", "StartsAt", "DATE NULL"); await AddColumn(c, "Bundles", "EndsAt", "DATE NULL");
         await AddColumn(c, "Bundles", "Season", "VARCHAR(30) NULL"); await AddColumn(c, "Bundles", "Kind", "VARCHAR(10) NOT NULL DEFAULT 'Bundle'");
         await AddColumn(c, "Bundles", "Description", "VARCHAR(500) NULL"); await AddColumn(c, "Bundles", "ImagePath", "VARCHAR(260) NULL");
-        // in-shop QR Ph payment (shown on the sale screen only; never offered to online customers)
-        await c.ExecuteAsync("INSERT IGNORE INTO PaymentMethods (MethodCode, Label, IsOn) VALUES ('qrph','QR Ph (scan to pay)',1)");
-        // payment buttons are Cash, GCash and PayMongo. The old combined label becomes "PayMongo" (orders follow), and PayPal is switched off once
-        await c.ExecuteAsync("UPDATE Orders SET PaymentMethod='PayMongo' WHERE PaymentMethod='GCash / Maya / Card (online)'");
-        if (await c.ExecuteAsync("UPDATE PaymentMethods SET Label='PayMongo' WHERE MethodCode='paymongo' AND Label='GCash / Maya / Card (online)'") > 0)
-            await c.ExecuteAsync("UPDATE PaymentMethods SET IsOn=0 WHERE MethodCode='paypal'");
         // a unique index on SKU (ignored when it already exists)
         try { await c.ExecuteAsync("CREATE UNIQUE INDEX UX_Products_Sku ON Products(Sku)"); } catch (MySqlException) { }
     }
@@ -1546,14 +1800,14 @@ static class Seed
                     if (!System.Text.RegularExpressions.Regex.IsMatch(dbName, @"^[A-Za-z0-9_]+$")) throw new InvalidOperationException("Database name may only use letters, numbers and underscores.");
                     await root.ExecuteAsync($"CREATE DATABASE IF NOT EXISTS `{dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
                 }
-                using var c = new MySqlConnection(cs); await c.OpenAsync();
+                using var c = new MySqlConnection(cs); await c.OpenAsync(); await c.ExecuteAsync("SET time_zone='" + Promos.SqlOffset + "'");   // same shop-time clock as Db.Open
                 await RunFile(c, "schema.sql"); await Migrate(c); await RunFile(c, "seed.sql");
                 await Security.InitAsync(c, cfg);
                 await LoginGuard.CleanAsync(c);
                 if (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Users") > 0) return;
                 var dev = (cfg["ASPNETCORE_ENVIRONMENT"] ?? "Production") == "Development";
                 var adminPw = cfg["Seed:AdminPassword"]; var custPw = cfg["Seed:CustomerPassword"];
-                if (string.IsNullOrWhiteSpace(adminPw)) { if (dev) adminPw = "admin123"; else { Console.WriteLine("[Syscle] Set Seed__AdminPassword (8-14 characters) before the first start. No accounts were created."); return; } }
+                if (string.IsNullOrWhiteSpace(adminPw)) { if (dev) adminPw = "admin123"; else { Console.WriteLine("[Syscle] Set Seed__AdminPassword (8-64 characters) before the first start. No accounts were created."); return; } }
                 await c.ExecuteAsync("INSERT INTO Users(Username,Email,PasswordHash,Role) VALUES ('admin','admin@syscle.com',@a,'SuperAdmin')", new { a = Pw.Hash(adminPw!) });
                 if (string.IsNullOrWhiteSpace(custPw) && dev) custPw = "password123";
                 if (!string.IsNullOrWhiteSpace(custPw) && custPw != "none") await c.ExecuteAsync("INSERT INTO Users(Username,Email,PasswordHash,Role) VALUES ('customer1','customer@syscle.com',@b,'Customer')", new { b = Pw.Hash(custPw) });
@@ -1565,5 +1819,7 @@ static class Seed
                 if (attempt < 20) await Task.Delay(2000);
             }
         }
+        // do not start a shop that has no database: stop with a clear message so the host shows the failure and restarts or alerts
+        throw new InvalidOperationException("Web-Syscle could not set up the database after 20 attempts. Check ConnectionStrings__Syscle and that MySQL is running and reachable.");
     }
 }

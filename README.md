@@ -16,7 +16,7 @@ The app creates the database, tables and starter data by itself on first start (
 3. `cd Syscle/Syscle.Web && dotnet run`. In Development, demo logins are `admin` / `admin123` and `customer1` / `password123`.
 
 ## GitHub Codespaces
-Open the repository in a Codespace. It starts MySQL and the site (port 5080) with practice payments switched on. See `docs/GITHUB_CODESPACES_GUIDE.md`.
+Open the repository in a Codespace. It starts MySQL and the site (port 5080). Online payment needs your PayMongo test key (see `docs/PAYMONGO_DELIVERY_SETUP.md`). See `docs/GITHUB_CODESPACES_GUIDE.md`.
 
 ## Configuration (environment variables or appsettings)
 | Setting | Purpose |
@@ -24,8 +24,12 @@ Open the repository in a Codespace. It starts MySQL and the site (port 5080) wit
 | `ConnectionStrings__Syscle` | MySQL connection |
 | `Security__DataKey` | Key that encrypts stored 2FA secrets (32+ characters). If empty, one is generated and stored in the database |
 | `Seed__AdminPassword` | Password of the first admin (production only) |
-| `Payments__TestMode` | `true` = online payments use a practice page |
-| `EmailSettings__*`, `SmsSettings__*`, `PayMongo__*`, `PayPal__*` | Optional providers. Never commit real keys |
+| `Security__TrustProxy` | `true` (default in code) = the site is behind a reverse proxy or hosting platform that sets `X-Forwarded-For`. Set `false` when visitors connect straight to the app, otherwise they can fake their address and dodge the per-address login limit. `docker compose` sets it to `false` unless `TRUST_PROXY=true` |
+| `Security__SecureCookies` | `true` on the live HTTPS site so the sign-in cookie is never sent over plain HTTP (default `false`, which is right for `http://localhost`). `docker compose` reads `SECURE_COOKIES` |
+| `PayMongo__Methods` | Ways to pay on the PayMongo page, default `qrph,gcash,paymaya,card`. `qrph` shows a QR code made for the exact order total. PayMongo only accepts methods switched on in your PayMongo dashboard, so remove `qrph` until QR Ph is active on your account |
+| `App__PublicUrl` | The address of your live site (for example `https://yourshop.example.com`). Password-reset emails use it for their link, so **it is required on a live site**. In Development the request address is used |
+| `EmailSettings__*`, `SmsSettings__*` | Password recovery by email (SMTP or SendGrid) and SMS (Semaphore). Step by step: `docs/EMAIL_SMS_SETUP.md` |
+| `PayMongo__*` | The payment provider for all online payments, and the wallet the store withdraws from (Admin > Withdraw funds, see `docs/WITHDRAWALS.md`). Never commit real keys |
 
 Store rules (admin auto sign-out seconds, low-stock level, order hold times, refund window, seasons, dropdown lists) are edited in the Admin panel under **Lists and rules**, not in code.
 
@@ -36,7 +40,7 @@ Store rules (admin auto sign-out seconds, low-stock level, order hold times, ref
 - All dashboard and report data comes from `/api/admin/*`, which requires an admin session.
 
 ## Order flow
-Customer orders -> admin **confirms the items** -> payment is recorded (automatic for PayMongo/PayPal, manual for cash/GCash) -> order moves Ready / Out for delivery -> Completed. Sales figures count only paid, item-confirmed, non-refunded orders. Unpaid online orders and uncollected pick-ups are cancelled automatically and returned to stock after the hold times in the store rules. Customers can request a refund; the admin approves or declines it.
+Customer orders -> admin **confirms the items** -> payment is recorded (automatic for PayMongo, confirmed by the admin for cash) -> order moves Ready / Out for delivery -> Completed. Sales figures count only paid, item-confirmed, non-refunded orders. Unpaid online orders and uncollected pick-ups are cancelled automatically and returned to stock after the hold times in the store rules. Customers can request a refund; the admin approves or declines it.
 
 ## Folders
 - `Syscle/Syscle.Web/Program.cs`, `Features.cs`, `Infra.cs`: server code

@@ -21,6 +21,13 @@ static class Sql
     // The day a sale is booked is the day the money was received.
     public const string RevDate = "IFNULL(o.PaidAt,o.CreatedAt)";
     public const string Code = "CONCAT(IF(o.Channel='Walk-in','WLK-','ORD-'), LPAD(o.OrderId,6,'0'))";
+    // The SET part used whenever an online payment is confirmed by PayMongo/PayPal. If the order was already cancelled (for example it expired while the
+    // customer was paying), the money is real but the order is dead, so the order is flagged for a refund instead of silently turning into a paid, cancelled order.
+    // (RefundStatus is assigned last on purpose: MySQL reads the new value of a column in the assignments after it.)
+    public const string MarkPaid = "PaymentStatus='Paid', PaidAt=NOW(), " +
+        "RefundReason=IF(Status='Cancelled' AND RefundStatus='None','Paid after the order was cancelled',RefundReason), " +
+        "RefundRequestedAt=IF(Status='Cancelled' AND RefundStatus='None',NOW(),RefundRequestedAt), " +
+        "RefundStatus=IF(Status='Cancelled' AND RefundStatus='None','Requested',RefundStatus)";
 }
 
 // Store rules saved in the Settings table (Admin > Settings). A short cache keeps the database from being asked on every click.
@@ -30,9 +37,7 @@ static class Cfg
     {
         ["StoreName"] = "Web-Syscle", ["StoreTagline"] = "Shop & Customize", ["DeliveryFee"] = "100", ["LowStockThreshold"] = "5", ["MaxFeatured"] = "12",
         ["AdminIdleSeconds"] = "300", ["UnpaidOnlineHours"] = "2", ["PickupHoldDays"] = "2", ["RefundWindowDays"] = "7",
-        ["DailyExpenses"] = "0", ["DefaultMarginPct"] = "30", ["PromoPopup"] = "1",
-        ["DeliveryMaxKm"] = "8", ["DeliveryBaseFee"] = "50", ["DeliveryPerKm"] = "12", ["LalamoveService"] = "MOTORCYCLE", ["AutoPrintReceipt"] = "1", ["CodMax"] = "5000",
-        ["ReceiptFooter"] = "Thank you for shopping with us! Please keep this receipt for returns and warranty."
+        ["DailyExpenses"] = "0", ["DefaultMarginPct"] = "30", ["PromoPopup"] = "1"
     };
     static readonly ConcurrentDictionary<string, (string v, DateTime at)> Cache = new();
     public static void Clear() => Cache.Clear();
@@ -233,8 +238,8 @@ class ExpireRow { public int OrderId { get; set; } public string Code { get; set
 
 class OrderExpiryService : BackgroundService
 {
-    readonly Db _db; readonly EmailService _mail; readonly LalamoveService _lala;
-    public OrderExpiryService(Db db, EmailService mail, LalamoveService lala) { _db = db; _mail = mail; _lala = lala; }
+    readonly Db _db; readonly EmailService _mail;
+    public OrderExpiryService(Db db, EmailService mail) { _db = db; _mail = mail; }
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         try { await Task.Delay(TimeSpan.FromSeconds(30), stop); } catch (OperationCanceledException) { return; }
@@ -251,9 +256,6 @@ class OrderExpiryService : BackgroundService
     {
         using var c = _db.Open();
         await LoginGuard.CleanAsync(c);
-        // booked Lalamove riders: keep the order status in step even when nobody has the order page open
-        foreach (var oid in (await c.QueryAsync<int>("SELECT OrderId FROM Orders WHERE LalamoveStatus IN ('ASSIGNING_DRIVER','ON_GOING','PICKED_UP') LIMIT 50")).ToList())
-        { try { await DeliveryEndpoints.RefreshAsync(c, _lala, oid, true); } catch (Exception ex) { Console.WriteLine("[Syscle] Lalamove refresh failed: " + ex.Message); } }
         var unpaidHours = await Cfg.IntAsync(c, "UnpaidOnlineHours", 1, 720); var holdDays = await Cfg.IntAsync(c, "PickupHoldDays", 0, 90);
         var cut = Promos.Today.AddDays(-holdDays);
         const string head = "SELECT o.OrderId, CONCAT('ORD-', LPAD(o.OrderId,6,'0')) AS Code, o.CustomerName, u.Email, IFNULL(u.EmailNotify,1) AS EmailNotify, ";
@@ -296,10 +298,12 @@ static class Schemes
         if (p.StartsWith("/api/admin") || p.StartsWith("/pages/admin") || p.StartsWith("/javascripts/admin")) return Admin;
         return ctx.Request.Headers["X-Area"].ToString() == "admin" ? Admin : Customer;
     }
-    public static void Cookie(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions o, string name)
+    public static void Cookie(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions o, string name, bool secureOnly = false)
     {
         o.Cookie.Name = name;
         o.Cookie.HttpOnly = true;
+        // secureOnly (Security:SecureCookies=true): the browser only ever sends the sign-in cookie over HTTPS. Otherwise it follows the request (Secure whenever the site is opened over HTTPS).
+        o.Cookie.SecurePolicy = secureOnly ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
         o.Cookie.SameSite = SameSiteMode.Lax;
         o.ExpireTimeSpan = TimeSpan.FromHours(8);
         o.SlidingExpiration = true;

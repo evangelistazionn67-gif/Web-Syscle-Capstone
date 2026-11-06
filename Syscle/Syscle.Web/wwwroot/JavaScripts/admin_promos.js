@@ -7,9 +7,9 @@
             promos = await api('/api/admin/promos');
             $('promo-table-body').innerHTML = promos.length ? promos.map(p => `<tr data-code="${esc(p.code)}">
         <td><b>${esc(p.code)}</b></td><td>${p.percent} %</td><td>${p.season ? esc(p.season) : '<span class="sy-muted">-</span>'}</td>
-        <td>${p.isPublic ? '<span class="sy-chip info">Pop-up</span> ' : ''}${p.startsAt || p.endsAt ? esc((p.startsAt || 'now') + ' to ' + (p.endsAt || 'no end')) : 'Always'}</td><td>${p.uses}${p.maxUses ? ' / ' + p.maxUses : ' <small class="sy-muted">(unlimited)</small>'}</td>
+        <td>${p.isPublic ? '<span class="sy-chip info">Pop-up</span> ' : ''}${p.startsAt || p.endsAt ? esc((p.startsAt || 'now') + ' to ' + (p.endsAt || 'no end')) : 'Always'}</td><td>${p.uses}${p.maxUses ? ' / ' + p.maxUses : ' <small class="sy-muted">(unlimited)</small>'}<br><small class="sy-muted">${p.maxPerUser ? 'max ' + p.maxPerUser + ' per customer' : 'no limit per customer'}</small></td>
         <td>${(() => { const t = (d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(new Date()); const st = !p.isActive ? ['warn', 'Off'] : p.startsAt && t < p.startsAt ? ['warn', 'Scheduled'] : p.endsAt && t > p.endsAt ? ['bad', 'Expired'] : p.maxUses && p.uses >= p.maxUses ? ['bad', 'Used up'] : ['ok', 'Active']; return `<span class="sy-chip ${st[0]}">${st[1]}</span>`; })()}</td>
-        <td><button class="sy-btn small" data-toggle="1">${p.isActive ? 'Turn off' : 'Turn on'}</button> <button class="sy-btn small ghost" data-pct="1">Change %</button> <button class="sy-btn small ghost" data-pub="1">${p.isPublic ? 'Hide pop-up' : 'Show in pop-up'}</button> <button class="sy-btn small ghost" data-lim="1">${p.maxUses ? 'Make unlimited' : 'Set limit'}</button> <button class="sy-x" data-del="1">Delete</button></td></tr>`).join('')
+        <td><button class="sy-btn small" data-toggle="1">${p.isActive ? 'Turn off' : 'Turn on'}</button> <button class="sy-btn small ghost" data-pct="1">Change %</button> <button class="sy-btn small ghost" data-pub="1">${p.isPublic ? 'Hide pop-up' : 'Show in pop-up'}</button> <button class="sy-btn small ghost" data-lim="1">${p.maxUses ? 'Make unlimited' : 'Set limit'}</button> <button class="sy-btn small ghost" data-pu="1">Per customer</button> <button class="sy-x" data-del="1">Delete</button></td></tr>`).join('')
                 : '<tr><td colspan="7" class="sy-empty">No promo codes yet.</td></tr>';
         } catch (e) { toast(e.message, true); }
     }
@@ -18,9 +18,11 @@
         if (!code) return toast('Type a code.', true);
         const limit = document.querySelector('input[name=pc-limit]:checked').value;
         if (limit === 'limited' && !($('pc-max').value && +$('pc-max').value >= 1)) return toast('Enter how many times a Limited code can be used.', true);
-        const body = { code, percent, season: $('pc-season').value || null, startsAt: $('pc-start').value || null, endsAt: $('pc-end').value || null, limit, maxUses: limit === 'limited' ? +$('pc-max').value : null, isPublic: $('pc-public').checked };
+        const plimit = document.querySelector('input[name=pc-plimit]:checked').value;
+        if (plimit === 'limited' && !($('pc-pu').value && +$('pc-pu').value >= 1)) return toast('Enter how many times one customer can use the code.', true);
+        const body = { perUserLimit: plimit, perUser: plimit === 'limited' ? +$('pc-pu').value : null, code, percent, season: $('pc-season').value || null, startsAt: $('pc-start').value || null, endsAt: $('pc-end').value || null, limit, maxUses: limit === 'limited' ? +$('pc-max').value : null, isPublic: $('pc-public').checked };
         if (body.startsAt && body.endsAt && body.endsAt < body.startsAt) return toast('The end date must be after the start date.', true);
-        try { await api('/api/admin/promos', 'POST', body); $('pc-code').value = $('pc-start').value = $('pc-end').value = $('pc-max').value = ''; $('pc-public').checked = false; $('pc-season').value = ''; await load(); toast('Promo code added.'); } catch (e) { toast(e.message, true); }
+        try { await api('/api/admin/promos', 'POST', body); $('pc-code').value = $('pc-start').value = $('pc-end').value = $('pc-max').value = ''; $('pc-public').checked = false; $('pc-season').value = ''; $('pc-pu').value = 1; document.querySelector('input[name=pc-plimit][value=limited]').checked = true; await load(); toast('Promo code added.'); } catch (e) { toast(e.message, true); }
     });
     $('promo-table-body').addEventListener('click', async e => {
         const row = e.target.closest('tr[data-code]'); if (!row) return;
@@ -31,6 +33,13 @@
             else if (e.target.dataset.lim) {
                 if (p.maxUses) { await api(url, 'PUT', { limit: 'unlimited' }); await load(); toast('Now unlimited.'); }
                 else { const v = prompt('How many times can ' + code + ' be used?', '100'); if (v === null) return; await api(url, 'PUT', { limit: 'limited', maxUses: +v }); await load(); toast('Limit set.'); }
+            }
+            else if (e.target.dataset.pu) {
+                const v = prompt('How many times can ONE customer use ' + code + '? (type 0 for no limit per customer)', p.maxPerUser || 1); if (v === null) return;
+                if (+v === 0) { await api(url, 'PUT', { perUserLimit: 'unlimited' }); toast('No limit per customer.'); }
+                else if (+v >= 1) { await api(url, 'PUT', { perUserLimit: 'limited', perUser: +v }); toast('Each customer can use it ' + (+v) + (+v === 1 ? ' time.' : ' times.')); }
+                else return toast('Type 1 or more, or 0 for no limit.', true);
+                await load();
             }
             else if (e.target.dataset.pct) {
                 const v = prompt('New discount percent for ' + code + ' (1-90):', p.percent); if (v === null) return;

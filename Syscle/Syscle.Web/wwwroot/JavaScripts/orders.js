@@ -21,7 +21,6 @@
     if (o.refundStatus === 'Rejected') return '<div class="sy-banner bad">' + ico('slash-circle') + ' Refund declined.' + (o.refundNote ? ' ' + esc(o.refundNote) : '') + ' Message the store if you have questions.</div>';
     return '';
   }
-  const LALA = { ASSIGNING_DRIVER: 'Finding a rider for your order', ON_GOING: 'A rider is on the way to the store', PICKED_UP: 'Your order is out for delivery', COMPLETED: 'Delivered', REJECTED: 'The rider could not take the job. The store will book another.', EXPIRED: 'No rider found yet. The store will book again.', MANUAL: 'The store booked your rider' };
   function card(o) {
     const del = o.fulfillment === 'Delivery', online = /online/i.test(o.payment || ''), open = ['Pending', 'Preparing', 'Ready', 'Out for Delivery'].includes(o.status);
     const holdDays = rule('PickupHoldDays', 3), payHours = rule('UnpaidOnlineHours', 24);
@@ -33,11 +32,10 @@
       ${!online && o.paymentStatus !== 'Paid' && open ? '<div class="sy-banner info">' + ico('info-circle') + ' <span>The store records your payment after it checks your items.</span></div>' : ''}
       ${refundBanner(o)}
       ${tracker(o)}<p class="sy-sub" style="margin:8px 0 0;text-align:center">${MSG[o.status] || ''}</p>
-      ${del ? `<div class="sy-deliv"><b>Deliver to</b><span>${esc(o.address || '')}</span><span>${ico('telephone')} ${esc(o.deliveryPhone || '')}</span>${o.courier ? '<span>Courier: ' + esc(o.courier) + (o.trackingNo ? ' &middot; ' + esc(o.trackingNo) : '') + '</span>' : ''}${LALA[o.lalamoveStatus] ? '<span>' + ico('truck') + ' ' + esc(LALA[o.lalamoveStatus]) + (o.lalamoveDriver ? ' &middot; Rider: ' + esc(o.lalamoveDriver) : '') + (o.lalamoveLink ? ' &middot; <a href="' + esc(o.lalamoveLink) + '" target="_blank" rel="noopener">Track your rider</a>' : '') + '</span>' : ''}${+o.deliveryKm > 0 ? '<span class="sy-muted">About ' + (+o.deliveryKm) + ' km from the store</span>' : ''}</div>` : ''}
+      ${del ? `<div class="sy-deliv"><b>Deliver to</b><span>${esc(o.address || '')}</span><span>${ico('telephone')} ${esc(o.deliveryPhone || '')}</span>${o.courier ? '<span>Courier: ' + esc(o.courier) + (o.trackingNo ? ' &middot; ' + esc(o.trackingNo) : '') + '</span>' : ''}</div>` : ''}
       <div class="sy-order-items">${esc(o.items || '')}</div>
       <div class="sy-order-f"><span>Total <b>${peso(o.total)}</b>${+o.deliveryFee > 0 ? ' <small class="sy-muted">(incl. ' + peso(o.deliveryFee) + ' delivery)</small>' : ''}</span>
         <span class="sy-order-btns">${open ? `<button class="sy-btn ghost small" data-qr="${esc(o.code)}" type="button">${ico('qr-code')} Order QR</button>` : ''}
-        ${o.paymentStatus === 'Paid' ? `<button class="sy-btn ghost small" data-receipt="${o.id}" type="button">${ico('printer')} Receipt</button>` : ''}
         ${o.status === 'Completed' ? `<button class="sy-btn ghost small" data-review="${o.id}" type="button">${ico('star')} Review items</button>` : ''}
         ${canRefund ? `<button class="sy-btn ghost small" data-refund="${o.id}" type="button">${ico('arrow-counterclockwise')} Request refund</button>` : ''}
         ${o.status === 'Pending' && o.paymentStatus !== 'Paid' ? `<button class="sy-x" data-cancel="${o.id}" type="button">Cancel order</button>` : ''}</span></div></article>`;
@@ -48,7 +46,7 @@
     const ready = rows.filter(o => o.status === 'Ready' && o.fulfillment !== 'Delivery').length;
     alerts.innerHTML = ready ? `<div class="sy-banner ready">${ico('bag-check')} ${ready} order${ready > 1 ? 's are' : ' is'} ready for pick-up.</div>` : '';
   }
-  async function load() { try { rows = await api('/api/orders'); const act = rows.filter(o => ['ASSIGNING_DRIVER', 'ON_GOING', 'PICKED_UP'].includes(o.lalamoveStatus)); if (act.length) { await Promise.all(act.map(o => api('/api/orders/' + o.id + '/delivery').catch(() => null))); rows = await api('/api/orders'); } if (!document.querySelector('.sy-ov')) paint(); } catch (e) { list.innerHTML = '<div class="sy-empty">Could not load your orders.</div>'; } }
+  async function load() { try { rows = await api('/api/orders'); if (!document.querySelector('.sy-ov')) paint(); } catch (e) { list.innerHTML = '<div class="sy-empty">Could not load your orders.</div>'; } }
   tabs.addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); paint(); });
 
   function showQr(code) {
@@ -80,7 +78,6 @@
   list.addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.pay) { try { const r = await api('/api/orders/' + t.dataset.pay + '/pay', 'POST'); if (r.paid) { toast('Payment received. Thank you!'); await load(); } else location.href = r.checkoutUrl; } catch (err) { toast(err.message, true); } return; }
-    if (t.dataset.receipt) { window.open('/Pages/receipt.html?order=' + t.dataset.receipt + '&print=1', '_blank'); return; }
     if (t.dataset.qr) return showQr(t.dataset.qr);
     if (t.dataset.refund) return askRefund(+t.dataset.refund);
     if (t.dataset.review) return reviewItems(+t.dataset.review);

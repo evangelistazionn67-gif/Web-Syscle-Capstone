@@ -1,5 +1,8 @@
 let signedOutShown = false;
 async function api(url, method = 'GET', body) {
+    // Pages shared by both portals (My account, Settings) do not know yet whether an admin or a customer is signed in: shell.js works that out first. Without this wait the very first
+    // request went out as "shop", the server looked for a customer sign-in an admin does not have, and the admin was shown "Signed Out". The 3-second limit means a slow check can never freeze the page.
+    if (document.body.dataset.area === 'shared' && !window.SY_AREA && window.SY_READY) await Promise.race([window.SY_READY.catch(() => { }), new Promise(r => setTimeout(r, 3000))]);
     const opt = { method, headers: { 'X-Requested-With': 'syscle', 'X-Area': window.SY_AREA || (document.body.dataset.area === 'admin' ? 'admin' : 'shop') } };
     if (body instanceof FormData) opt.body = body;
     else if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
